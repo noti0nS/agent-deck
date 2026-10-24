@@ -22,9 +22,12 @@
     data-testid="reconnect-hairline"
   ></div>
   {#if deckStore.connectionStatus === 'reconnecting'}
-    <div class="bg-[#FFB020]/15 border-b border-[#FFB020]/40 px-4 py-1 text-[13px] text-[#FFB020] font-mono-tabular flex items-center justify-between">
-      <span>reconnecting… showing last known state</span>
-      <span>seq #{deckStore.state.seq}</span>
+    <div class="bg-[#0D0F14] border-b border-[#FFB020]/40 px-4 py-1.5 text-[12px] text-[#FFB020] font-mono-tabular flex items-center justify-between">
+      <span class="flex items-center gap-2">
+        <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#FFB020]"></span>
+        <span>reconnecting… showing last known state</span>
+      </span>
+      <span class="text-[#8B93A6]">seq #{deckStore.state.seq}</span>
     </div>
   {/if}
 {/if}
