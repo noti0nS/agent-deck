@@ -8,6 +8,11 @@ build/
 *.tsbuildinfo
 .output/
 
+# Compiled hook shim (build output of tools/hook-shim/main.go)
+# Rebuilt by `npm run build:hooks`, which is part of `npm run build`.
+tools/hook-shim/agent-deck-hook
+tools/hook-shim/agent-deck-hook.exe
+
 # Test artifacts
 test-results/
 playwright-report/

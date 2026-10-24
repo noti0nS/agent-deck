@@ -141,7 +141,10 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
   if (cmd === 'setup' && args[0] === 'claude') {
     const dryRun = args.includes('--dry-run');
-    const exePath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', 'agent-deck-hook.exe');
+    const shimName = process.platform === 'win32' ? 'agent-deck-hook.exe' : 'agent-deck-hook';
+    const exePath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', shimName);
+    // Built by `npm run build:hooks`. Falls back to PATH for packaged installs
+    // that ship the shim alongside the CLI instead of in the repo tree.
     const commandPath = existsSync(exePath) ? exePath : 'agent-deck-hook';
     const res = setupClaudeHooks({ commandPath, dryRun });
     console.log(res.diff);

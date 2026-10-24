@@ -10,7 +10,8 @@
     "tools/doctor"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build:hooks && npm run build --workspaces --if-present",
+    "build:hooks": "node tools/hook-shim/build.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "npm run typecheck --workspaces --if-present",
