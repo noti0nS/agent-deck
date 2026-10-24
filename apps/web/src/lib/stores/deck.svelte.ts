@@ -1,0 +1,327 @@
+import {
+  createInitialDeckState,
+  getSortedDeckRuns,
+  reduceWireFrame,
+  type AgentRun,
+  type DeckPrefs,
+  type DeckState,
+  type WireFrame
+} from '@agent-deck/core';
+
+export type ViewName = 'ambient' | 'deck' | 'usage' | 'ledger' | 'detail';
+
+const VIEW_STORAGE_KEY = 'agent_deck_active_view';
+
+class DeckClientStore {
+  public state = $state<DeckState>(createInitialDeckState());
+  public activeView = $state<ViewName>('deck');
+  public previousView = $state<ViewName>('deck');
+  public selectedRunId = $state<string | null>(null);
+  public connectionStatus = $state<'connected' | 'reconnecting' | 'recovered'>('connected');
+  public needsPairing = $state<boolean>(false);
+  public now = $state<number>(Date.now());
+  public pricingInfo = $state<{ version: string; updatedAt: string; tailscaleUrl?: string }>({
+    version: '2026.10.1',
+    updatedAt: '2026-10-23'
+  });
+  public pixelShift = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+  public isNightDimmed = $state<boolean>(false);
+  public showAllDone = $state<boolean>(false);
+  public waitingAnnouncement = $state<string>('');
+
+  private eventSource: EventSource | null = null;
+  private lastEtag: string | null = null;
+  private lastInteractionAt = Date.now();
+  private clockTimer: ReturnType<typeof setInterval> | null = null;
+  private pixelShiftTimer: ReturnType<typeof setInterval> | null = null;
+  private wakeLockSentinel: WakeLockSentinel | null = null;
+  private knownWaitingIds = new Set<string>();
+
+  public get sortedRuns(): AgentRun[] {
+    return getSortedDeckRuns(this.state.runs);
+  }
+
+  public get selectedRun(): AgentRun | null {
+    if (!this.selectedRunId) return null;
+    return this.state.runs[this.selectedRunId] ?? null;
+  }
+
+  public init(): () => void {
+    if (typeof window === 'undefined') return () => {};
+
+    const savedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewName | null;
+    if (savedView && ['ambient', 'deck', 'usage', 'ledger'].includes(savedView)) {
+      this.activeView = savedView;
+    }
+
+    this.fetchSnapshot().then(() => {
+      this.connectStream();
+    });
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        this.fetchSnapshot().then(() => {
+          if (!this.eventSource || this.eventSource.readyState === EventSource.CLOSED) {
+            this.connectStream();
+          }
+        });
+        if (this.activeView === 'ambient') {
+          this.requestWakeLock();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const onInteract = () => {
+      this.lastInteractionAt = Date.now();
+      if (this.activeView === 'ambient') {
+        this.setView('deck');
+      }
+    };
+    window.addEventListener('pointerdown', onInteract, { passive: true });
+    window.addEventListener('keydown', onInteract);
+
+    this.clockTimer = setInterval(() => {
+      this.now = Date.now();
+      this.checkIdleAndNightSchedule();
+    }, 1000);
+
+    // Burn-in pixel shift ±6px every 10 minutes (§8.6)
+    this.pixelShiftTimer = setInterval(() => {
+      const dx = Math.floor(Math.random() * 13) - 6;
+      const dy = Math.floor(Math.random() * 13) - 6;
+      this.pixelShift = { x: dx, y: dy };
+    }, 10 * 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pointerdown', onInteract);
+      window.removeEventListener('keydown', onInteract);
+      if (this.clockTimer) clearInterval(this.clockTimer);
+      if (this.pixelShiftTimer) clearInterval(this.pixelShiftTimer);
+      if (this.eventSource) this.eventSource.close();
+      this.releaseWakeLock();
+    };
+  }
+
+  public setView(view: ViewName, runId?: string): void {
+    if (view === 'detail' && runId) {
+      if (this.activeView !== 'detail') {
+        this.previousView = this.activeView;
+      }
+      this.selectedRunId = runId;
+      this.activeView = 'detail';
+      this.markRunRead(runId);
+      return;
+    }
+    this.activeView = view;
+    if (view !== 'detail' && typeof window !== 'undefined') {
+      localStorage.setItem(VIEW_STORAGE_KEY, view);
+    }
+    if (view === 'ambient') {
+      this.requestWakeLock();
+    } else {
+      this.releaseWakeLock();
+    }
+  }
+
+  public backFromDetail(): void {
+    this.activeView = this.previousView || 'deck';
+    this.selectedRunId = null;
+  }
+
+  public async fetchSnapshot(): Promise<void> {
+    try {
+      const headers: Record<string, string> = {};
+      if (this.lastEtag) {
+        headers['If-None-Match'] = this.lastEtag;
+      }
+      const res = await fetch('/api/snapshot', { headers });
+      if (res.status === 401) {
+        this.needsPairing = true;
+        return;
+      }
+      if (res.status === 304) {
+        return;
+      }
+      if (!res.ok) return;
+
+      this.needsPairing = false;
+      const etag = res.headers.get('ETag');
+      if (etag) this.lastEtag = etag;
+
+      const data = await res.json();
+      const runsMap: Record<string, AgentRun> = {};
+      for (const r of data.runs ?? []) {
+        runsMap[r.id] = r;
+      }
+      const adaptersMap = { ...this.state.adapters };
+      for (const a of data.adapters ?? []) {
+        adaptersMap[a.source as keyof typeof adaptersMap] = a;
+      }
+
+      this.state = {
+        seq: data.seq ?? 0,
+        runs: runsMap,
+        adapters: adaptersMap,
+        aggregates: data.aggregates ?? this.state.aggregates,
+        prefs: data.config?.prefs ?? this.state.prefs
+      };
+
+      if (data.config) {
+        this.pricingInfo = {
+          version: data.config.pricingVersion ?? '2026.10.1',
+          updatedAt: data.config.pricingUpdatedAt ?? '2026-10-23',
+          tailscaleUrl: data.config.tailscaleUrl
+        };
+      }
+      this.syncWaitingAnnouncements();
+    } catch {
+      this.connectionStatus = 'reconnecting';
+    }
+  }
+
+  public connectStream(): void {
+    if (typeof window === 'undefined') return;
+    if (this.eventSource) {
+      this.eventSource.close();
+    }
+
+    const url = `/api/stream?lastEventId=${this.state.seq}`;
+    const es = new EventSource(url);
+    this.eventSource = es;
+
+    es.onopen = () => {
+      if (this.connectionStatus === 'reconnecting') {
+        this.connectionStatus = 'recovered';
+        setTimeout(() => {
+          if (this.connectionStatus === 'recovered') {
+            this.connectionStatus = 'connected';
+          }
+        }, 2500);
+      } else {
+        this.connectionStatus = 'connected';
+      }
+    };
+
+    es.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(event.data) as WireFrame;
+        const prevWaitingCount = this.state.aggregates.waitingCount;
+        this.state = reduceWireFrame(this.state, frame, Date.now());
+        this.syncWaitingAnnouncements();
+
+        // Instant wake from Ambient if a new attention state arrives (§14 D7)
+        if (this.activeView === 'ambient' && this.state.aggregates.waitingCount > prevWaitingCount) {
+          this.setView('deck');
+        }
+      } catch {
+        // ignore malformed frame
+      }
+    };
+
+    es.onerror = async () => {
+      this.connectionStatus = 'reconnecting';
+      es.close();
+      // Check if 409 gap resync is needed by fetching snapshot before reconnecting
+      await this.fetchSnapshot();
+      setTimeout(() => {
+        this.connectStream();
+      }, 1500);
+    };
+  }
+
+  private syncWaitingAnnouncements(): void {
+    for (const run of Object.values(this.state.runs)) {
+      if (run.status === 'waiting' && !this.knownWaitingIds.has(run.id)) {
+        this.knownWaitingIds.add(run.id);
+        this.waitingAnnouncement = `${run.source} in ${run.projectName} is waiting on you: ${run.attention?.summary ?? 'attention needed'}`;
+      } else if (run.status !== 'waiting' && this.knownWaitingIds.has(run.id)) {
+        this.knownWaitingIds.delete(run.id);
+      }
+    }
+  }
+
+  private checkIdleAndNightSchedule(): void {
+    const idleSec = (this.now - this.lastInteractionAt) / 1000;
+    const targetIdle = this.state.prefs.ambientIdleSeconds ?? 180;
+    if (
+      this.activeView === 'deck' &&
+      idleSec >= targetIdle &&
+      this.state.aggregates.waitingCount === 0
+    ) {
+      this.setView('ambient');
+    }
+
+    const hour = new Date(this.now).getHours();
+    const startH = this.state.prefs.nightDimStartHour ?? 22;
+    const endH = this.state.prefs.nightDimEndHour ?? 7;
+    if (startH > endH) {
+      this.isNightDimmed = hour >= startH || hour < endH;
+    } else {
+      this.isNightDimmed = hour >= startH && hour < endH;
+    }
+  }
+
+  public async markRunRead(runId: string): Promise<void> {
+    try {
+      await fetch('/api/prefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markReadRunId: runId })
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  public async savePrefs(partial: Partial<DeckPrefs>): Promise<void> {
+    const res = await fetch('/api/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(partial)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      this.state.prefs = data.prefs;
+    }
+  }
+
+  public async submitPairCode(code: string): Promise<boolean> {
+    const res = await fetch('/api/pair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    if (res.ok) {
+      this.needsPairing = false;
+      await this.fetchSnapshot();
+      this.connectStream();
+      return true;
+    }
+    return false;
+  }
+
+  private async requestWakeLock(): Promise<void> {
+    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+      try {
+        this.wakeLockSentinel = await navigator.wakeLock.request('screen');
+      } catch {
+        // Fallback to CSS dimming handled in Ambient view
+      }
+    }
+  }
+
+  private async releaseWakeLock(): Promise<void> {
+    if (this.wakeLockSentinel) {
+      try {
+        await this.wakeLockSentinel.release();
+      } catch {
+        // ignore
+      }
+      this.wakeLockSentinel = null;
+    }
+  }
+}
+
+export const deckStore = new DeckClientStore();

@@ -1,0 +1,21 @@
+{
+  "conversation_id": "conv-agy-fixture-1",
+  "title": "Implement CBenef Hash Update",
+  "workspace_uris": "[\"file:///t%3A/R3/ProdigyR3Apps\"]",
+  "status": "CASCADE_RUN_STATUS_IDLE",
+  "steps": [
+    {
+      "idx": 0,
+      "step_type": 132,
+      "status": 3,
+      "metadata": "call_101  read_file  {\"Path\":\"T:\\\\R3\\\\ProdigyR3Apps\\\\Hash.cs\"}"
+    },
+    {
+      "idx": 1,
+      "step_type": 132,
+      "status": 5,
+      "metadata": "call_102  run_command  {\"CommandLine\":\"dotnet test\"}",
+      "permissions": "Allow command execution: dotnet test"
+    }
+  ]
+}

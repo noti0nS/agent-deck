@@ -1,0 +1,7 @@
+{"type":"ai-title","aiTitle":"Fix Windows path normalization in hook shim","timestamp":"2026-10-23T10:00:00.000Z"}
+{"type":"last-prompt","lastPrompt":"Make sure the Claude hook shim exits 0 and tailer tracks byte offsets","timestamp":"2026-10-23T10:00:02.000Z"}
+{"type":"mode","mode":"accept-edits","timestamp":"2026-10-23T10:00:03.000Z"}
+{"type":"user","uuid":"u_1","timestamp":"2026-10-23T10:00:05.000Z"}
+{"type":"assistant","uuid":"a_1","timestamp":"2026-10-23T10:00:10.000Z","message":{"id":"msg_01","model":"claude-sonnet-4-20250514","usage":{"input_tokens":20000,"output_tokens":1500,"cache_read_input_tokens":50000,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"I will update the Claude adapter and verify the byte offsets."},{"type":"tool_use","id":"tu_1","name":"Edit","input":{"file_path":"src/adapters/claude.ts"}}]}}
+{"type":"file-history-delta","filePath":"src/adapters/claude.ts","additions":85,"deletions":4,"timestamp":"2026-10-23T10:00:12.000Z"}
+{"type":"assistant","uuid":"a_2","timestamp":"2026-10-23T10:00:20.000Z","message":{"id":"msg_02","model":"claude-sonnet-4-20250514","usage":{"input_tokens":30000,"output_tokens":2500,"cache_read_input_tokens":50000,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"All tests are passing now."}]}}

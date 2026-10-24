@@ -1,0 +1,9 @@
+{
+  "name": "cursor-agent",
+  "commandMatch": "cursor-agent",
+  "modelDefault": "claude-sonnet-4",
+  "turnStartRegex": "^\\[turn\\]\\s+(.+)$",
+  "toolStartRegex": "^\\[tool:([a-z_]+)\\]\\s+(.+)$",
+  "permissionPromptRegex": "^\\[confirm\\]\\s+(.+)\\?$",
+  "usageTokensRegex": "^\\[usage\\]\\s+in=([0-9]+)\\s+out=([0-9]+)$"
+}
