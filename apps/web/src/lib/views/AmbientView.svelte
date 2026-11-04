@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { deckStore } from '$lib/stores/deck.svelte';
-  import { formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '$lib/format';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
+  import { formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '#lib/format.js';
 
   const runs = $derived(deckStore.dashboardSessions.slice(0, 6));
   const agg = $derived(deckStore.visibleAggregates);
@@ -8,7 +8,7 @@
 
 <!-- Ambient View (§8.2): chrome-free, 2x type size for across-the-room legibility -->
 <section
-  class="min-h-[calc(100dvh-88px)] flex flex-col justify-between gap-4 py-3 sm:gap-5 sm:py-4 sm:cursor-none"
+  class="ambient-monitor flex flex-col gap-4 py-3 sm:gap-5 sm:py-4"
   data-testid="ambient-view"
 >
   <!-- Aggregate Hero Matrix Row -->
@@ -54,6 +54,7 @@
 
   <!-- Horizontal bands per agent (2x Deck type size) -->
   <div class="flex-1 flex flex-col gap-2.5 sm:gap-3">
+    {#if !runs.length}<div class="deck-empty"><h2>Standing by</h2><p>Sessions will appear here when your agents are active.</p></div>{/if}
     {#each runs as run, idx (run.id)}
       {@const sColor = SOURCE_COLORS[run.source] ?? '#6BA6FF'}
       {@const stColor = STATUS_COLORS[run.status] ?? '#7A8496'}

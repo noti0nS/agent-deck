@@ -1,7 +1,7 @@
 <script lang="ts">
   import Scritto from "@scritto/svelte";
-  import { deckStore } from '$lib/stores/deck.svelte';
-  import { formatTokens } from '$lib/format';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
+  import { formatTokens } from '#lib/format.js';
   const agg = $derived(deckStore.visibleAggregates);
   const recent = $derived(deckStore.sortedRuns.flatMap(r => (r.recentSteps ?? []).map(step => ({ step, project: r.projectName }))).sort((a,b) => (b.step.endedAt ?? 0) - (a.step.endedAt ?? 0))[0]);
   const activity = $derived(Array.from({length: 7}, (_, i) => deckStore.sortedRuns.reduce((sum, run) => sum + (run.activityTimeline ?? []).slice(i * 8, (i + 1) * 8).filter(t => t !== 'none').length, 0)));

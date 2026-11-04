@@ -1,19 +1,39 @@
 <script lang="ts">
   import { Settings } from "@lucide/svelte";
-  import { deckStore, type ViewName } from '$lib/stores/deck.svelte';
-  import { formatTokens } from '$lib/format';
-  import PairCodeInput from '$lib/components/PairCodeInput.svelte';
-  import SourceSelector from '$lib/components/SourceSelector.svelte';
-  import AmbientView from '$lib/views/AmbientView.svelte';
-  import DeckView from '$lib/views/DeckView.svelte';
-  import UsageView from '$lib/views/UsageView.svelte';
-  import LedgerView from '$lib/views/LedgerView.svelte';
-  import DetailView from '$lib/views/DetailView.svelte';
+  import { onMount } from 'svelte';
+  import { deckStore, type ViewName } from '#lib/stores/deck.svelte.js';
+  import { formatTokens } from '#lib/format.js';
+  import PairCodeInput from '#lib/components/PairCodeInput.svelte';
+  import SourceSelector from '#lib/components/SourceSelector.svelte';
+  import AmbientView from '#lib/views/AmbientView.svelte';
+  import DeckView from '#lib/views/DeckView.svelte';
+  import UsageView from '#lib/views/UsageView.svelte';
+  import LedgerView from '#lib/views/LedgerView.svelte';
+  import DetailView from '#lib/views/DetailView.svelte';
 
   const MAIN_VIEWS: ViewName[] = ['ambient', 'deck', 'usage', 'ledger'];
   let settingsOpen = $state(false);
   let pairCodeInput = $state('');
   let pairError = $state(false);
+  let fullscreen = $state(false);
+  let fullscreenSupported = $state(false);
+  let fullscreenError = $state('');
+  onMount(() => {
+    fullscreenSupported = !!document.documentElement.requestFullscreen;
+    const sync = () => fullscreen = !!document.fullscreenElement;
+    sync();
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  });
+  async function toggleFullscreen() {
+    fullscreenError = '';
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      fullscreenError = 'Fullscreen is unavailable in this browser. You can keep using ambient mode.';
+    }
+  }
 
   async function onPairSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -34,6 +54,7 @@
 
 <main
   class="dashboard-shell"
+  class:ambient-shell={deckStore.activeView === 'ambient' && !deckStore.needsPairing}
 
 >
   {#if deckStore.needsPairing}
@@ -110,5 +131,18 @@
     {:else if deckStore.activeView === 'detail'}
       <DetailView />
     {/if}
+    <footer class="display-controls" aria-label="Display and session controls">
+      <span class="display-mode">{deckStore.activeView === 'ambient' ? 'Ambient monitor' : 'Agent Deck'}</span>
+      <div>
+        {#if deckStore.activeView === 'ambient'}
+          <button type="button" onclick={() => deckStore.setView('deck')}>Back to projects</button>
+        {:else}
+          <button type="button" onclick={() => deckStore.setView('ambient')}>Ambient mode</button>
+        {/if}
+        {#if fullscreenSupported}<button type="button" class="fullscreen-control" onclick={toggleFullscreen}>{fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</button>{/if}
+        <button type="button" disabled={deckStore.loggingOut} onclick={() => { settingsOpen = false; pairCodeInput = ''; pairError = false; void deckStore.logout(); }}>{deckStore.loggingOut ? 'Logging out…' : 'Log out'}</button>
+      </div>
+      {#if fullscreenError || deckStore.logoutError}<p role="alert">{fullscreenError || deckStore.logoutError}</p>{/if}
+    </footer>
   {/if}
 </main>

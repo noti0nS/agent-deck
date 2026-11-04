@@ -230,3 +230,38 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,s
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
 }
+/* Monitor panels: explicit channels, activity screen and aligned readings. */
+.ambient-shell { padding-top:20px; min-height:100dvh; display:flex; flex-direction:column; }
+.ambient-monitor { flex:1; }
+.display-controls { margin-top:32px; padding-top:16px; padding-bottom:env(safe-area-inset-bottom); border-top:1px solid #303943; display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.display-mode { margin-right:auto; font:11px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; color:#a5b1bf; }
+.display-controls>div { display:flex; flex-wrap:wrap; gap:8px; }
+.display-controls button { min-height:48px; padding:10px 16px; border:1px solid #38444f; border-radius:3px; color:#cbd5df; background:#151b21; }
+.display-controls button:hover { background:#25313b; border-color:#8193a5; }
+.display-controls .fullscreen-control { color:#c6e3f7; border-color:#54738b; }
+.display-controls button:disabled { opacity:.5; }
+.display-controls>p { width:100%; color:#ffb020; font-size:13px; }
+.project-panel { border-radius:3px; border-color:#34404b; background:#13191f; animation:none; }
+.project-panel:hover { transform:none; box-shadow:none; border-color:#6d8091; }
+.session-card { border-left:0; border-top:2px solid var(--rail); background:#13191f; padding:0; gap:0; }
+.session-card:hover { background:#18212a; }
+.monitor-channel { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid #2c3640; background:#0e141a; font:10px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; color:#aebdca; }
+.monitor-signal { display:flex; align-items:center; gap:6px; }
+.monitor-signal i { width:6px; height:6px; background:currentColor; border-radius:50%; }
+.session-heading { padding:16px 16px 4px; flex-wrap:wrap; }
+.session-heading h3 { font-size:18px; line-height:1.3; }
+.session-status { font:10px/1.5 ui-monospace,monospace; text-transform:uppercase; white-space:normal; }
+.session-descriptor { padding:0 16px; color:#aeb8c3; }
+.session-command { margin:16px; padding:12px; border:1px solid #2d3c48; border-radius:0; background:#090f14; min-height:100px; }
+.session-command-label { font:10px ui-monospace,monospace; color:#8fa7bb; letter-spacing:.08em; }
+.session-command p { color:#d3e1ec; font-size:12px; line-height:1.7; }
+.session-directive,.session-note,.session-progress { margin:0 16px 16px; }
+.monitor-readings { margin-top:auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid #2d3c48; border-bottom:1px solid #2d3c48; background:#10171d; }
+.monitor-readings>div { padding:12px; min-width:0; }
+.monitor-readings>div+div { border-left:1px solid #2d3c48; }
+.monitor-readings span { display:block; font:9px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; color:#9baebf; margin-bottom:7px; }
+.monitor-readings strong { font:500 16px/1.4 ui-monospace,monospace; font-variant-numeric:tabular-nums; color:#dfebf4; overflow-wrap:anywhere; }
+.monitor-model { display:flex; justify-content:space-between; gap:12px; padding:10px 16px; font:10px/1.5 ui-monospace,monospace; color:#9aafc0; overflow-wrap:anywhere; }
+.monitor-model>span { min-width:0; }
+.telemetry-card { border-radius:3px; background:#13191f; border-color:#34404b; }
+@media(max-width:767px) { .ambient-shell { padding-top:12px; }.display-mode { width:100%; }.display-controls>div { width:100%; }.display-controls button { flex:1; padding:10px; }.monitor-readings strong { font-size:14px; } }

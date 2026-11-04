@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { deckStore } from '$lib/stores/deck.svelte';
-  import { formatCost, formatTokens, SOURCE_COLORS, STATUS_COLORS } from '$lib/format';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
+  import { formatCost, formatTokens, SOURCE_COLORS, STATUS_COLORS } from '#lib/format.js';
 
   const runs = $derived(deckStore.sortedRuns);
 

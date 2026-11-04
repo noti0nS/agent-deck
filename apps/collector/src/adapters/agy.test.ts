@@ -81,11 +81,11 @@ describe('AgyAdapter & SQLite Fixture Replay', () => {
       );
       INSERT INTO conversation_summaries VALUES (
         'conv-agy-1',
-        'Implement CBenef Hash Update',
+        'Update sample cache',
         'Updating hash calculation',
         3,
         '2026-10-23 12:00:00+00:00',
-        '["file:///t%3A/R3/ProdigyR3Apps"]',
+        '["file:///t%3A/R3/sample-desktop"]',
         'CASCADE_RUN_STATUS_RUNNING',
         'gemini-2.5-pro',
         ''
@@ -113,7 +113,7 @@ describe('AgyAdapter & SQLite Fixture Replay', () => {
       CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER);
     `);
 
-    const step1Meta = Buffer.from('call_101  read_file  {"Path":"T:\\\\R3\\\\ProdigyR3Apps\\\\Hash.cs"}', 'utf8');
+    const step1Meta = Buffer.from('call_101  read_file  {"Path":"T:\\\\R3\\\\sample-desktop\\\\Hash.cs"}', 'utf8');
     const step2Meta = Buffer.from('call_102  run_command  {"CommandLine":"dotnet test"}', 'utf8');
     const step2Perm = Buffer.from('Allow command execution: dotnet test', 'utf8');
 
@@ -148,8 +148,8 @@ describe('AgyAdapter & SQLite Fixture Replay', () => {
 
     const run = engine.state.runs['agy:conv-agy-1'];
     expect(run).toBeDefined();
-    expect(run.title).toBe('Implement CBenef Hash Update');
-    expect(run.projectName).toBe('ProdigyR3Apps');
+    expect(run.title).toBe('Update sample cache');
+    expect(run.projectName).toBe('sample-desktop');
     expect(run.status).toBe('waiting');
     expect(run.attention?.summary).toContain('Allow command execution: dotnet test');
     expect(run.recentMessages?.[0].preview).toBe('Checking the hash implementation.');

@@ -4,8 +4,8 @@ const jsQR = createRequire(import.meta.url)('jsqr') as (pixels: Uint8ClampedArra
 import { renderAsciiQr } from './pair.js';
 
 it.each([
-  'http://192.168.0.3:4100?code=ABCD-2345',
-  'https://lucaspc.tailb2f2e4.ts.net:8444?code=ABCD-2345'
+  'http://192.168.1.23:4100?code=ABCD-2345',
+  'https://workstation.example-tailnet.ts.net:8444?code=ABCD-2345'
 ])('terminal QR decodes to %s', (url) => {
   const rows = renderAsciiQr(url).split('\n').map(row => row.replace(/\x1b\[[0-9;]*m/g, ''));
   const scale = 8;

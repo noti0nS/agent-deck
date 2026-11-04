@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { deckStore } from '$lib/stores/deck.svelte';
-  import { formatCost, formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '$lib/format';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
+  import { formatCost, formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '#lib/format.js';
 
   const run = $derived(deckStore.selectedRun);
 

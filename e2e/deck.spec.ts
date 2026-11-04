@@ -49,8 +49,8 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         payload: {
           source: 'opencode',
           nativeId: 'ses_1',
-          projectPath: 'T:\\R4\\ProdigyR4Apps',
-          projectName: 'ProdigyR4Apps',
+          projectPath: 'T:\\R4\\sample-api',
+          projectName: 'sample-api',
           title: 'Refactor MCP auth middleware',
           model: 'gpt-5.6-luna',
           confidence: 'live',
@@ -110,8 +110,8 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         payload: {
           source: 'claude',
           nativeId: 'ses_2',
-          projectPath: 'P:\\projects\\vega-chat',
-          projectName: 'vega-chat',
+          projectPath: 'P:\\projects\\sample-chat',
+          projectName: 'sample-chat',
           title: 'Fix SSE stream handler',
           model: 'claude-sonnet-4',
           confidence: 'live',
@@ -127,7 +127,7 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
             id: 'att_1',
             kind: 'permission',
             summary: 'dotnet test --filter PkceFlowTests',
-            projectPath: 'P:\\projects\\vega-chat',
+            projectPath: 'P:\\projects\\sample-chat',
             requestedAt: now - 15_000
           }
         }
@@ -166,8 +166,10 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
       try {
         await page.setViewportSize(viewport);
         await page.goto(baseUrl);
+    await expect(page.getByTestId('ambient-view')).toBeVisible();
+    await page.getByRole('button', { name: 'Back to projects', exact: true }).click();
 
-        // 1. Deck view is default and waiting card sorts first
+        // 1. Ambient opens first; explicit navigation reveals the waiting card first
         await expect(page.getByTestId('deck-view')).toBeVisible();
         const cards = page.getByTestId('run-card');
         await expect(cards).toHaveCount(3);
@@ -202,20 +204,22 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         await page.getByRole('button', { name: /Back/i }).click();
         await expect(page.getByTestId('deck-view')).toBeVisible();
 
-        // 4. Switch to Usage view and verify persistence across reload
+        // 4. Usage works; reopening the app always starts in ambient
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByTestId('nav-usage').click();
         await expect(page.getByTestId('usage-view')).toBeVisible();
         await expectNoHorizontalOverflow(page);
         await page.reload();
-        await expect(page.getByTestId('usage-view')).toBeVisible();
+        await expect(page.getByTestId('ambient-view')).toBeVisible();
+        await page.getByRole('button', { name: 'Back to projects', exact: true }).click();
+        await expect(page.getByTestId('deck-view')).toBeVisible();
         await expectNoHorizontalOverflow(page);
 
         // 5. Switch to Ledger view
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByTestId('nav-ledger').click();
         await expect(page.getByTestId('ledger-view')).toBeVisible();
-        await expect(page.getByTestId('ledger-view')).toContainText('ProdigyR4Apps');
+        await expect(page.getByTestId('ledger-view')).toContainText('sample-api');
         await expectNoHorizontalOverflow(page);
 
         // 6. Switch to Ambient view

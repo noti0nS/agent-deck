@@ -778,7 +778,7 @@ belongs anyway.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ ● opencode   ProdigyR4Apps                 12:41  ⤢  │  source dot + project + elapsed
+│ ● opencode   sample-api                 12:41  ⤢  │  source dot + project + elapsed
 │ Refactor MCP auth middleware                         │  title (2 lines max)
 │ ┌──────────────────────────────────────────────────┐ │
 │ │ ● running   ⟳ edit  src/Mcp/OAuth/PkceFlow.cs    │ │  status + "now" line
@@ -807,13 +807,13 @@ state and tells you where to go:
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  ⚠  OPENCODE · ProdigyR4Apps               waiting 0:34│
+│  ⚠  OPENCODE · sample-api               waiting 0:34│
 │                                                      │
 │     Wants to run a shell command                     │
 │     ┌──────────────────────────────────────────────┐ │
 │     │ dotnet test --filter PkceFlowTests           │ │
 │     └──────────────────────────────────────────────┘ │
-│     in  T:\R3\ProdigyR4Apps\ProdigyR4Apps            │
+│     in  T:\R3\sample-api\sample-api            │
 │                                                      │
 │     → answer in the terminal · tap to see context    │
 └──────────────────────────────────────────────────────┘
@@ -931,7 +931,7 @@ speed and deployment friction now*, not for an imagined future.
 | Silent-by-design fit | ✅ (this app makes no alerts) | ✅ | ✅ |
 | Background / kiosk mode | none — app must stay foreground | possible (device-owner / kiosk) | possible |
 | Rendering an animated dashboard | excellent (CSS/compositor) | excellent (Skia) | good, more work |
-| Your existing expertise | high (vega-chat) | **highest** (prodigy_app) | low |
+| Your existing expertise | high (sample-chat) | **highest** (sample-mobile) | low |
 | Stack count | 1 (TS everywhere) | 2 (TS backend + Dart client) | 2 (+ native config) |
 
 **Verdict: PWA for v1.** Three decisive reasons, in order:

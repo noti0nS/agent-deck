@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { deckStore } from '$lib/stores/deck.svelte';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
 
   const prefs = $derived(deckStore.state.prefs);
   const adapters = $derived(Object.values(deckStore.state.adapters));

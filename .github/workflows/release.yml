@@ -1,0 +1,76 @@
+name: Prepare draft release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to validate and package (for example v1.0.0)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:hooks
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm audit --audit-level=moderate
+      - run: npm run release:bundle
+      - run: npm run release:smoke
+      - shell: bash
+        run: |
+          cd .release
+          for directory in agent-deck-*/; do
+            tar -czf "${directory%/}.tar.gz" "${directory%/}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-${{ matrix.os }}
+          path: .release/*.tar.gz
+          if-no-files-found: error
+  draft:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: runtime-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create checksums and draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          cd artifacts
+          sha256sum *.tar.gz > SHA256SUMS
+          gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease \
+            --title "Agent Deck $RELEASE_TAG (experimental)" \
+            --notes-file ../docs/release-notes.md --repo "$GITHUB_REPOSITORY" \
+            ./*.tar.gz SHA256SUMS

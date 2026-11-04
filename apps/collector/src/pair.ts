@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
 import { promisify } from 'node:util';
@@ -7,64 +7,94 @@ import type { CollectorStore } from './store.js';
 
 const execFileAsync = promisify(execFile);
 
+export interface PairedDevice {
+  id: string;
+  label: string;
+  tokenHash: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface PairingState {
-  sessionToken: string;
+  devices: PairedDevice[];
   activeCode?: string;
   codeExpiresAt?: number;
 }
 
 export class PairingManager {
-  private readonly store: CollectorStore;
-  private state: PairingState;
+  constructor(private readonly store: CollectorStore) {}
 
-  constructor(store: CollectorStore) {
-    this.store = store;
+  private read(): PairingState {
     const saved = this.store.getSetting<PairingState>('pairing');
-    if (saved?.sessionToken) {
-      this.state = saved;
-    } else {
-      this.state = {
-        sessionToken: randomBytes(32).toString('hex')
-      };
-      this.store.setSetting('pairing', this.state);
-    }
+    // Legacy shared tokens are deliberately not accepted after this upgrade.
+    return { devices: saved?.devices ?? [], activeCode: saved?.activeCode, codeExpiresAt: saved?.codeExpiresAt };
   }
 
-  public getSessionToken(): string {
-    return this.state.sessionToken;
+  public listDevices(): Omit<PairedDevice, 'tokenHash'>[] {
+    return this.read().devices.filter(d => d.expiresAt > Date.now())
+      .map(({ tokenHash: _hash, ...device }) => device);
+  }
+
+  public issueSession(label = 'LAN browser'): { id: string; token: string } {
+    const state = this.read();
+    const token = randomBytes(32).toString('hex');
+    const id = randomUUID();
+    state.devices = state.devices.filter(d => d.expiresAt > Date.now());
+    state.devices.push({ id, label: label.slice(0, 100), tokenHash: this.hash(token),
+      createdAt: Date.now(), expiresAt: Date.now() + 365 * 24 * 3600_000 });
+    this.store.setSetting('pairing', state);
+    return { id, token };
+  }
+
+  public getSessionToken(): string { return this.issueSession().token; }
+
+  public revokeDevice(id: string): boolean {
+    const state = this.read();
+    const before = state.devices.length;
+    state.devices = state.devices.filter(d => d.id !== id);
+    this.store.setSetting('pairing', state);
+    return state.devices.length !== before;
+  }
+
+  public revokeAll(): void {
+    this.store.setSetting('pairing', { devices: [] });
   }
 
   public generatePairingCode(ttlMs = 5 * 60_000): { code: string; expiresAt: number } {
     const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
     const bytes = randomBytes(8);
-    let part1 = '';
-    let part2 = '';
-    for (let i = 0; i < 4; i++) {
-      part1 += alphabet[bytes[i] % alphabet.length];
-      part2 += alphabet[bytes[i + 4] % alphabet.length];
-    }
-    const code = `${part1}-${part2}`;
+    const letters = Array.from(bytes, byte => alphabet[byte % alphabet.length]).join('');
+    const code = letters.slice(0, 4) + '-' + letters.slice(4);
     const expiresAt = Date.now() + ttlMs;
-    this.state.activeCode = code;
-    this.state.codeExpiresAt = expiresAt;
-    this.store.setSetting('pairing', this.state);
+    const state = this.read();
+    state.activeCode = code;
+    state.codeExpiresAt = expiresAt;
+    this.store.setSetting('pairing', state);
     return { code, expiresAt };
   }
 
   public verifyCode(inputCode: string, now = Date.now()): boolean {
-    // The pair CLI writes through another connection while the server is running.
-    this.state = this.store.getSetting<PairingState>('pairing') ?? this.state;
-    if (!this.state.activeCode || !this.state.codeExpiresAt) return false;
-    if (now > this.state.codeExpiresAt) return false;
-    const normalizedInput = inputCode.trim().toUpperCase();
-    const normalizedActive = this.state.activeCode.trim().toUpperCase();
-    return normalizedInput === normalizedActive;
+    const state = this.read();
+    return Boolean(state.activeCode && state.codeExpiresAt && now < state.codeExpiresAt &&
+      inputCode.trim().toUpperCase() === state.activeCode.trim().toUpperCase());
+  }
+
+  public consumeCode(code: string): boolean {
+    if (!this.verifyCode(code)) return false;
+    const state = this.read();
+    delete state.activeCode;
+    delete state.codeExpiresAt;
+    this.store.setSetting('pairing', state);
+    return true;
   }
 
   public verifyCookieToken(token: string | undefined): boolean {
     if (!token) return false;
-    return token === this.state.sessionToken;
+    const hash = this.hash(token);
+    return this.read().devices.some(d => d.expiresAt > Date.now() && d.tokenHash === hash);
   }
+
+  private hash(token: string): string { return createHash('sha256').update(token).digest('hex'); }
 }
 
 export function renderAsciiQr(text: string): string {
@@ -117,26 +147,21 @@ export async function getTailscaleMagicDnsUrl(port = 4100): Promise<string | und
         return `https://${address.replace(/:443$/, '')}`;
       }
     }
-  } catch { /* Fall back to device discovery when serve config is unavailable. */ }
-  try {
-    const { stdout } = await execFileAsync('tailscale', ['status', '--json'], { timeout: 3000 });
-    const data = JSON.parse(stdout) as { Self?: { DNSName?: string } };
-    const dns = data?.Self?.DNSName?.replace(/\.$/, '');
-    if (dns) {
-      return `https://${dns}`;
-    }
-  } catch {
-    // tailscale CLI not running or unavailable
-  }
-  const tsIp = findTailscaleAddress();
-  return tsIp ? `https://${tsIp}:${port}` : undefined;
+  } catch { /* Tailscale is optional. */ }
+  return undefined;
 }
 
 export async function configureTailscaleServe(
   port = 4100,
   httpsPort?: number
 ): Promise<{ ok: boolean; url?: string; message: string }> {
+  if (!Number.isInteger(httpsPort ?? 443) || (httpsPort ?? 443) < 1 || (httpsPort ?? 443) > 65535) {
+    return { ok: false, message: 'HTTPS port must be an integer from 1 to 65535.' };
+  }
   try {
+    const { stdout: status } = await execFileAsync('tailscale', ['serve', 'status', '--json'], { timeout: 3000 });
+    const conflict = tailscaleServeConflict(JSON.parse(status), port, httpsPort ?? 443);
+    if (conflict) return { ok: false, message: conflict };
     // `tailscale serve --bg <port>` claims HTTPS :443. When something else already
     // serves the tailnet root, pass --https=<port> to publish on a dedicated port
     // instead of replacing that mapping.
@@ -159,4 +184,22 @@ export async function configureTailscaleServe(
       message: err instanceof Error ? err.message : String(err)
     };
   }
+}
+
+export function tailscaleServeConflict(config: {
+  Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>;
+  TCP?: Record<string, { HTTPS?: boolean }>;
+}, port: number, httpsPort: number): string | undefined {
+  const sites = Object.entries(config.Web ?? {}).filter(([address]) => address.endsWith(':' + httpsPort));
+  for (const [, site] of sites) {
+    const handlers = site.Handlers ?? {};
+    if (Object.keys(handlers).some(path => path !== '/') ||
+        (handlers['/'] && handlers['/'].Proxy !== 'http://127.0.0.1:' + port)) {
+      return 'Tailscale HTTPS port is already used by another service. Choose AGENT_DECK_SERVE_HTTPS_PORT.';
+    }
+  }
+  if (config.TCP?.[String(httpsPort)] && (!config.TCP[String(httpsPort)].HTTPS || sites.length === 0)) {
+    return 'Tailscale port is already configured. Choose another AGENT_DECK_SERVE_HTTPS_PORT.';
+  }
+  return undefined;
 }

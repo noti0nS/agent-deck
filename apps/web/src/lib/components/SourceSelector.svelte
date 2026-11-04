@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { deckStore } from '$lib/stores/deck.svelte';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
   import type { Source } from '@agent-deck/core';
   const sources: { id: Source; name: string }[] = [
     { id: 'opencode', name: 'OpenCode' }, { id: 'claude', name: 'Claude' },

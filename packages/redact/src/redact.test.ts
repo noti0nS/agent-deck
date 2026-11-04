@@ -29,7 +29,7 @@ describe('packages/redact Redactor', () => {
 
   it('redacts absolute paths under ~/.ssh, .aws, and .codex/auth.json on Windows and Unix', () => {
     const raw =
-      'Reading C:\\Users\\Josel\\.ssh\\id_ed25519 and /home/dev/.aws/credentials and ~/.codex/auth.json';
+      'Reading C:\\Users\\developer\\.ssh\\id_ed25519 and /home/dev/.aws/credentials and ~/.codex/auth.json';
     const cleaned = redactor.redactString(raw);
     expect(cleaned).not.toContain('id_ed25519');
     expect(cleaned).not.toContain('.aws/credentials');

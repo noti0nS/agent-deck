@@ -1,6 +1,6 @@
 ﻿<script lang="ts">
   import type { AgentRun } from '@agent-deck/core';
-  import { formatCost, formatElapsed, formatRelativeAgo, formatTokens, STATUS_COLORS } from '$lib/format';
+  import { formatCost, formatElapsed, formatRelativeAgo, formatTokens, STATUS_COLORS } from '#lib/format.js';
   let { run, now, onSelect }: { run: AgentRun; now: number; animatePulse: boolean; waitingEscalateSeconds: number; onSelect: (id: string) => void } = $props();
   const names = { opencode: 'OpenCode', claude: 'Claude Code', codex: 'Codex', agy: 'Antigravity', pty: 'Terminal Agent' };
   const status = $derived(run.status === 'waiting' ? 'Waiting for input' : run.status === 'detached' ? 'No activity signal' : run.status);
@@ -10,11 +10,12 @@
   const message = $derived(run.recentMessages?.[0]);
 </script>
 <button type="button" class="session-card" style="--rail: {color}" onclick={() => onSelect(run.id)} data-testid="run-card" data-run-id={run.id} data-run-status={run.status}>
+  <div class="monitor-channel"><span>{names[run.source]}</span><span class="monitor-signal" style="color: {color}"><i></i>{run.confidence}</span></div>
   <div class="session-heading"><h3>{run.projectName}</h3><span class="session-status" style="color: {color}">{status}</span></div>
-  <p class="session-descriptor">Tool: <span>{names[run.source]}</span> · {run.title}</p>
+  <p class="session-descriptor">{run.title}</p>
   <div class="session-command">
-    <div class="session-command-label">{run.status === 'waiting' && run.attention ? 'Attention required' : 'Latest message'}</div>
-    <p>{(run.status === 'waiting' ? run.attention?.summary : undefined) ?? message?.preview ?? run.subtitle ?? 'No message available'}</p>
+    <div class="session-command-label">{run.status === 'waiting' && run.attention ? 'Attention required' : message ? 'Latest message' : run.currentStep ? 'Current activity' : 'Latest message'}</div>
+    <p>{(run.status === 'waiting' ? run.attention?.summary : undefined) ?? message?.preview ?? (run.currentStep ? `${run.currentStep.label}${run.currentStep.detail ? ` · ${run.currentStep.detail}` : ''}` : undefined) ?? run.subtitle ?? 'No message available'}</p>
   </div>
   {#if run.attention}
     <p class="session-directive"><span aria-hidden="true">↗</span> Please answer in the terminal · tap to see context</p>
@@ -23,6 +24,10 @@
   {:else}
     <p class="session-note">{run.confidence} · last activity {formatRelativeAgo(run.lastActivityAt, now)}</p>
   {/if}
-  <div class="session-footer"><span>{run.attention ? 'Waiting' : 'Duration'}: {formatElapsed(run.attention?.requestedAt ?? run.startedAt, now, run.endedAt ?? (['idle', 'done', 'detached'].includes(run.status) ? run.lastActivityAt : undefined))}</span><span>{formatTokens(run.usage.tokensIn + run.usage.tokensOut)} tok{cost ? ` · ${cost}` : ''}</span></div>
-  <div class="session-model">{run.model}{run.unread ? ' · unread' : ''}</div>
+  <div class="monitor-readings">
+    <div><span>{run.attention ? 'Waiting' : 'Duration'}</span><strong>{formatElapsed(run.attention?.requestedAt ?? run.startedAt, now, run.endedAt ?? (['idle', 'done', 'detached'].includes(run.status) ? run.lastActivityAt : undefined))}</strong></div>
+    <div><span>Tokens</span><strong>{formatTokens(run.usage.tokensIn + run.usage.tokensOut)}</strong></div>
+    <div><span>Cost</span><strong>{cost || '—'}</strong></div>
+  </div>
+  <div class="monitor-model"><span>{run.model || 'Model unavailable'}</span><span>{run.unread ? 'Unread' : 'Open session ↗'}</span></div>
 </button>

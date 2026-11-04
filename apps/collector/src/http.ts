@@ -28,6 +28,7 @@ import type { Adapter, EmitEventInput } from './adapter-spi.js';
 import { PairingManager, getTailscaleMagicDnsUrl } from './pair.js';
 import { RingBuffer } from './ring-buffer.js';
 import { CollectorStore } from './store.js';
+import { collectorPort } from './config.js';
 
 export interface CollectorEngineOptions {
   store?: CollectorStore;
@@ -104,7 +105,7 @@ export class CollectorEngine {
   }
 
   public async startAdapters(): Promise<void> {
-    this.tailscaleUrl = await getTailscaleMagicDnsUrl();
+    this.tailscaleUrl = await getTailscaleMagicDnsUrl(collectorPort());
     for (const adapter of this.adapters.values()) {
       try {
         await adapter.probe();
@@ -424,6 +425,7 @@ export class CollectorEngine {
   }
 
   public isAuthorized(req: FastifyRequest): boolean {
+    if (req.cookies?.['agent_deck_logged_out'] === '1') return false;
     const ip = req.ip || req.socket.remoteAddress || '';
     if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
       return true;
@@ -442,7 +444,7 @@ export async function buildHttpServer(engine: CollectorEngine, options?: { stati
 
   // Auth guard for non-loopback requests (except /api/pair and /api/health)
   app.addHook('onRequest', async (req, reply) => {
-    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/pair') && !req.url.startsWith('/api/health')) {
+    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/pair') && !req.url.startsWith('/api/health') && req.url !== '/api/logout') {
       if (!engine.isAuthorized(req)) {
         return reply.code(401).send({ error: 'Unauthorized: pairing required' });
       }
@@ -450,7 +452,8 @@ export async function buildHttpServer(engine: CollectorEngine, options?: { stati
   });
 
   // GET /api/health — adapters + collector + storage + self-metrics (§13)
-  app.get('/api/health', async () => {
+  app.get('/api/health', async (req) => {
+    if (!engine.isAuthorized(req)) return { status: 'ok' };
     const now = Date.now();
     const adapters = Object.values(engine.state.adapters);
     const maxLagMs = adapters.reduce((max, a) => Math.max(max, a.lagMs ?? 0), 0);
@@ -536,7 +539,12 @@ export async function buildHttpServer(engine: CollectorEngine, options?: { stati
       reply.raw.write(`id: ${lastSeq}\ndata: ${JSON.stringify(frame)}\n\n`);
     }
 
-    req.raw.on('close', () => {
+    const authTimer = setInterval(() => {
+      if (!engine.isAuthorized(req)) reply.raw.end();
+    }, 5000);
+    authTimer.unref();
+    reply.raw.on('close', () => {
+      clearInterval(authTimer);
       engine.removeClient(clientId);
     });
 
@@ -727,17 +735,26 @@ export async function buildHttpServer(engine: CollectorEngine, options?: { stati
     };
   });
 
+  app.post('/api/logout', async (_req, reply) => {
+    reply.clearCookie('agent_deck_session', { path: '/' });
+    reply.setCookie('agent_deck_logged_out', '1', {
+      httpOnly: true, sameSite: 'lax', path: '/', maxAge: 365 * 24 * 3600
+    });
+    return { ok: true };
+  });
+
   // POST /api/pair — { code } -> sets httpOnly; SameSite=Lax cookie (§6.2)
   app.post('/api/pair', async (req, reply) => {
     const parsed = PairRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid pairing code format' });
     }
-    const ok = engine.pairing.verifyCode(parsed.data.code);
+    const ok = engine.pairing.consumeCode(parsed.data.code);
     if (!ok) {
       return reply.code(403).send({ error: 'Invalid or expired pairing code' });
     }
-    reply.setCookie('agent_deck_session', engine.pairing.getSessionToken(), {
+    reply.clearCookie('agent_deck_logged_out', { path: '/' });
+    reply.setCookie('agent_deck_session', engine.pairing.issueSession(req.headers['user-agent'] || 'LAN browser').token, {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',

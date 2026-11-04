@@ -1,6 +1,6 @@
 # Adapter research — verified integration surface
 
-Probe date: 2026-10-23. Host: Windows, user `Josel`. All findings below were
+Probe date: 2026-10-23. Host: Windows, user `developer`. All findings below were
 produced by running the actual binaries and reading the actual data files, not
 from documentation. Anything marked _(unverified)_ was inferred from a file
 layout or help text but not confirmed by observing live data.

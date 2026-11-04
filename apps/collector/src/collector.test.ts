@@ -3,6 +3,30 @@ import { CollectorEngine, buildHttpServer } from './http.js';
 import { CollectorStore } from './store.js';
 
 describe('CollectorStore & CollectorEngine HTTP/SSE', () => {
+  it('logs out one browser without revoking another device and requires pairing on localhost', async () => {
+    const store = new CollectorStore(':memory:');
+    const engine = new CollectorEngine({ store });
+    const app = await buildHttpServer(engine);
+    try {
+      const session = engine.pairing.getSessionToken();
+      const loggedOut = await app.inject({ method: 'POST', url: '/api/logout', cookies: { agent_deck_session: session } });
+      expect(loggedOut.statusCode).toBe(200);
+      expect(loggedOut.cookies.find(c => c.name === 'agent_deck_session')?.value).toBe('');
+      expect(loggedOut.cookies.find(c => c.name === 'agent_deck_logged_out')?.httpOnly).toBe(true);
+      const blocked = await app.inject({ method: 'GET', url: '/api/snapshot', remoteAddress: '127.0.0.1', cookies: { agent_deck_logged_out: '1' } });
+      expect(blocked.statusCode).toBe(401);
+      const otherDevice = await app.inject({ method: 'GET', url: '/api/snapshot', remoteAddress: '192.168.1.10', cookies: { agent_deck_session: session } });
+      expect(otherDevice.statusCode).toBe(200);
+      const { code } = engine.pairing.generatePairingCode();
+      const paired = await app.inject({ method: 'POST', url: '/api/pair', cookies: { agent_deck_logged_out: '1' }, payload: { code } });
+      expect(paired.statusCode).toBe(200);
+      expect(paired.cookies.find(c => c.name === 'agent_deck_logged_out')?.value).toBe('');
+    } finally {
+      await app.close();
+      store.close();
+    }
+  });
+
   it('enforces idempotent usage_samples ingest keyed on sampleKey and rolls up agg_hourly / agg_daily', () => {
     const store = new CollectorStore(':memory:');
     const now = Date.now();
@@ -11,7 +35,7 @@ describe('CollectorStore & CollectorEngine HTTP/SSE', () => {
       sampleKey: 'opencode:ses_1:1:10',
       runId: 'opencode:ses_1',
       source: 'opencode' as const,
-      project: 'ProdigyR4Apps',
+      project: 'sample-api',
       model: 'gpt-5',
       ts: now,
       tokensIn: 10_000,
@@ -46,7 +70,7 @@ describe('CollectorStore & CollectorEngine HTTP/SSE', () => {
       to: now + 3600_000
     });
     expect(breakdown).toHaveLength(1);
-    expect(breakdown[0].key).toBe('ProdigyR4Apps');
+    expect(breakdown[0].key).toBe('sample-api');
     expect(breakdown[0].tokensIn).toBe(10_000);
     expect(breakdown[0].precision).toBe('exact');
     store.close();
@@ -118,7 +142,7 @@ describe('CollectorStore & CollectorEngine HTTP/SSE', () => {
       payload: { code }
     });
     expect(pairOk.statusCode).toBe(200);
-    expect(pairOk.headers['set-cookie']).toContain('HttpOnly');
+    expect(pairOk.cookies.find(cookie => cookie.name === 'agent_deck_session')?.httpOnly).toBe(true);
 
     // Prefs update
     const prefsRes = await app.inject({

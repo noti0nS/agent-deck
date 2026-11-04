@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { deckStore } from '$lib/stores/deck.svelte';
-  import { formatTokens, SOURCE_COLORS } from '$lib/format';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
+  import { formatTokens, SOURCE_COLORS } from '#lib/format.js';
   import type { AgentRun } from '@agent-deck/core';
 
   let range = $state<'today' | 'week'>('today');

@@ -157,7 +157,6 @@
   "metadata": {
     "userRole": "OWNER"
   },
-  "name": "projects/7661839418307341010",
   "origin": "STITCH",
   "projectType": "TEXT_TO_UI_PRO",
   "screenInstances": [
@@ -165,7 +164,6 @@
       "height": 1024,
       "id": "2aaa55e97e4c4ac79e083f4719fa151f",
       "label": "Avionics Tablet Glass Cockpit",
-      "sourceScreen": "projects/7661839418307341010/screens/2aaa55e97e4c4ac79e083f4719fa151f",
       "width": 1280,
       "x": 392,
       "y": 3627
@@ -175,7 +173,6 @@
       "id": "2e2c8a4c42094912ac89ad8f2116f6d5",
       "isResized": true,
       "label": "Agent Deck Clean Tablet Dashboard",
-      "sourceScreen": "projects/7661839418307341010/screens/2e2c8a4c42094912ac89ad8f2116f6d5",
       "width": 768,
       "x": 3080,
       "y": 3627
@@ -184,7 +181,6 @@
       "height": 1045,
       "id": "7f3c53425d5745f7a9473e7049270b5b",
       "label": "Active Deck Overview",
-      "sourceScreen": "projects/7661839418307341010/screens/7f3c53425d5745f7a9473e7049270b5b",
       "width": 390,
       "y": 2095
     },
@@ -192,7 +188,6 @@
       "height": 1242,
       "id": "8072c647005f498d8115f7838279b188",
       "label": "Project Matrix Console",
-      "sourceScreen": "projects/7661839418307341010/screens/8072c647005f498d8115f7838279b188",
       "width": 390,
       "x": -61,
       "y": 3627
@@ -208,7 +203,6 @@
       "height": 1839,
       "id": "e2e1e099003d45839cfe6443fb3f6030",
       "label": "Active Deck Overview",
-      "sourceScreen": "projects/7661839418307341010/screens/e2e1e099003d45839cfe6443fb3f6030",
       "width": 390,
       "x": 1478
     },
@@ -216,7 +210,6 @@
       "height": 1024,
       "id": "e4810ee75ef64e1abe8721a7a3664e7f",
       "label": "Agent Deck Tablet Overview",
-      "sourceScreen": "projects/7661839418307341010/screens/e4810ee75ef64e1abe8721a7a3664e7f",
       "width": 1280,
       "x": 1736,
       "y": 3627
@@ -225,16 +218,11 @@
       "height": 1222,
       "id": "ec90e30c5ca94b9b8187f457efa74d5d",
       "label": "Ambient Standby Mode",
-      "sourceScreen": "projects/7661839418307341010/screens/ec90e30c5ca94b9b8187f457efa74d5d",
       "width": 390,
       "x": 1024
     }
   ],
-  "thumbnailScreenshot": {
-    "downloadUrl": "https://lh3.googleusercontent.com/aida/AEtjO1VIjV_omhudhK601nvDuy_v4YEGjEIHSAoVNpayGVjEfwx0oPAT_fIQTkWGcR4WUKlEYB5lLbIeNUfcrQLAw_JQ-cIObdWTh9Kd03Tyed8YzICUJzsdoZeHG3weB71Y8Dj1naYVP7ba_jCMn-wHYa1u4gxhWqQhphC49JQvytFfgbcOpjGmGqYEvf4V8-3j4fsQifGKaCFTEJ7BGW3JXtKElRxuvFvDnt4J7WB_9LSofpGN_Zk8OYYO9A",
-    "name": "projects/7661839418307341010/screens/ec90e30c5ca94b9b8187f457efa74d5d/fileEntries/screenshot"
-  },
+  "thumbnailScreenshot": {},
   "title": "Agent Deck Monitor",
-  "updateTime": "2026-11-04T14:56:31.161025Z",
-  "visibility": "PRIVATE"
+  "updateTime": "2026-11-04T14:56:31.161025Z"
 }

@@ -26,6 +26,7 @@ import {
 import { CollectorStore } from './store.js';
 import { ModelCatalogSync } from './model-catalog.js';
 import { runMcp } from './mcp.js';
+import { collectorPort, collectorUrl, checkCollector, privateLanUrl, type LanListener } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +42,31 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   const cmd = argv[0] || 'status';
   const args = argv.slice(1);
   if (cmd === 'mcp') { await runMcp(); return 0; }
+
+  if (cmd === 'devices') {
+    const store = new CollectorStore(getDefaultCollectorDbPath());
+    try {
+      const pairing = new CollectorEngine({ store }).pairing;
+      if (args[0] === 'revoke' && args[1]) {
+        if (!pairing.revokeDevice(args[1])) throw new Error('Unknown device ID. Use devices list.');
+        console.log('Device revoked. Active LAN streams close within five seconds.');
+      } else if (args[0] === 'revoke-all') {
+        pairing.revokeAll();
+        console.log('All LAN devices and outstanding pairing codes revoked.');
+      } else if (!args[0] || args[0] === 'list') {
+        console.table(pairing.listDevices());
+      } else { throw new Error('Usage: agent-deck devices <list|revoke ID|revoke-all>'); }
+    } finally { store.close(); }
+    return 0;
+  }
+
+  if (cmd === 'setup' && args[0] === 'tailscale') {
+    const httpsPort = Number(process.env.AGENT_DECK_SERVE_HTTPS_PORT || 443);
+    const result = await configureTailscaleServe(collectorPort(), httpsPort);
+    console.log(result.message);
+    if (result.url) console.log(result.url);
+    return result.ok ? 0 : 1;
+  }
 
   if (cmd === 'probe') {
     const srcIdx = args.indexOf('--source');
@@ -127,13 +153,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     for (const a of adapters) {
       await a.probe();
     }
-    const tsUrl = await getTailscaleMagicDnsUrl();
+    const tsUrl = await getTailscaleMagicDnsUrl(collectorPort());
     const report = {
       generatedAt: Date.now(),
       nodeVersion: process.version,
       platform: process.platform,
-      collectorRunning: false,
-      collectorUrl: 'http://127.0.0.1:4100',
+      collectorRunning: await checkCollector(),
+      collectorUrl: collectorUrl(),
       tailscaleUrl: tsUrl,
       dbSizeBytes: store.getDbSizeBytes(),
       adapters: adapters.map((a) => adapterHealthToDoctor(a.health()))
@@ -149,7 +175,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const exePath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', shimName);
     // Built by `npm run build:hooks`. Falls back to PATH for packaged installs
     // that ship the shim alongside the CLI instead of in the repo tree.
-    const commandPath = existsSync(exePath) ? exePath : 'agent-deck-hook';
+    if (!existsSync(exePath)) throw new Error('Hook shim missing. Run npm run build:hooks before setup.');
+    const commandPath = exePath;
     const res = args[0] === 'agy' ? setupAgyHooks({ commandPath, dryRun }) : setupClaudeHooks({ commandPath, dryRun });
     console.log(res.diff);
     if (res.backupPath) {
@@ -199,36 +226,40 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
     const engine = new CollectorEngine({ store });
+    if (args.includes('--local')) {
+      const { code } = engine.pairing.generatePairingCode();
+      console.log(`Local browser pairing code: ${code} (expires 5 min; no tablet QR)`);
+      store.close();
+      return 0;
+    }
+    // The collector may have been started in another terminal with different env.
+    const listener = store.getSetting<LanListener>('lan_listener');
+    const lanUrl = privateLanUrl(listener);
+    if (!lanUrl || !await checkCollector(lanUrl)) {
+      console.error('No running LAN listener was found. Tailscale users do not need pairing.');
+      console.error('For local Wi-Fi, restart the collector with AGENT_DECK_LAN_HOST set to this PC\'s private IPv4 address.');
+      console.error('Windows: ./start-local-wifi.ps1 -LanAddress <PC-private-IPv4>');
+      store.close();
+      return 1;
+    }
     const { code } = engine.pairing.generatePairingCode();
-    const tsUrl = process.env.AGENT_DECK_LAN_HOST
-      ? `http://${process.env.AGENT_DECK_LAN_HOST}:${process.env.AGENT_DECK_PORT || 4100}`
-      : (await getTailscaleMagicDnsUrl()) ?? 'https://deck.<tailnet>.ts.net';
-    const qr = renderAsciiQr(`${tsUrl}?code=${code}`);
+    const qr = renderAsciiQr(`${lanUrl}?code=${code}`);
     console.log('  Scan to open Agent Deck on your tablet');
     console.log(qr);
-    console.log(tsUrl);
+    console.log(lanUrl);
     console.log(`                             code: ${code}  (expires 5 min)`);
     store.close();
     return 0;
   }
 
   if (cmd === 'status') {
-    try {
-      const res = await fetch('http://127.0.0.1:4100/api/health');
-      if (res.ok) {
-        const data = (await res.json()) as { seq?: number; metrics?: { sseClientCount?: number } };
-        console.log(`Collector ONLINE (seq=${data.seq}, sseClients=${data.metrics?.sseClientCount ?? 0})`);
-        return 0;
-      }
-    } catch {
-      // offline
-    }
-    console.log('Collector OFFLINE (http://127.0.0.1:4100)');
-    return 0;
+    const online = await checkCollector();
+    console.log(`Collector ${online ? 'ONLINE' : 'OFFLINE'} (${collectorUrl()})`);
+    return online ? 0 : 1;
   }
 
   if (cmd === 'start') {
-    const port = Number(process.env.AGENT_DECK_PORT || 4100);
+    const port = collectorPort();
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
     const modelCatalog = new ModelCatalogSync(store);
@@ -240,7 +271,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     });
 
     // Bootstrap first-run 90-day history backfill if not yet run (§7.3)
-    if (!store.getSetting('last_history_import')) {
+    if (process.env.AGENT_DECK_IMPORT_HISTORY !== '0' && !store.getSetting('last_history_import')) {
       runHistoryBackfill(engine);
     }
 
@@ -265,34 +296,30 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     await app.listen({ port, host });
     // Opt-in LAN listener shares the engine, but remote clients must pair.
     const lanHost = process.env.AGENT_DECK_LAN_HOST;
+    store.setSetting('lan_listener', null);
     if (lanHost) {
-      const parts = lanHost.split('.').map(Number);
-      const privateIp = parts.length === 4 && parts.every(n => Number.isInteger(n) && n >= 0 && n <= 255) &&
-        (parts[0] === 10 || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || (parts[0] === 192 && parts[1] === 168));
-      if (!privateIp) throw new Error('AGENT_DECK_LAN_HOST must be a specific private IPv4 address.');
+      if (!privateLanUrl({ host: lanHost, port })) throw new Error('AGENT_DECK_LAN_HOST must be a specific private IPv4 address.');
       const lanApp = await buildHttpServer(engine, { staticDir: existsSync(staticDir) ? staticDir : undefined });
       await lanApp.listen({ port, host: lanHost });
+      store.setSetting('lan_listener', { host: lanHost, port });
       console.log(`Local Wi-Fi: http://${lanHost}:${port} (device pairing required)`);
     }
     const tsAddress = findTailscaleAddress();
-    // Publish on HTTPS :443 by default; set AGENT_DECK_SERVE_HTTPS_PORT to use a
-    // dedicated port when another app already owns the tailnet root.
-    const serveHttpsPort = Number(process.env.AGENT_DECK_SERVE_HTTPS_PORT || 0) || undefined;
-    const serveRes = await configureTailscaleServe(port, serveHttpsPort);
+    const tailscaleUrl = await getTailscaleMagicDnsUrl(port);
     console.log(
       `Agent Deck collector listening on http://${host}:${port}` +
         (tsAddress ? ` (tailnet interface: ${tsAddress})` : '') +
-        (serveRes.url ? ` -> ${serveRes.url}` : ` (tailscale serve: ${serveRes.message})`)
+        (tailscaleUrl ? ` -> ${tailscaleUrl}` : '')
     );
     return 0;
   }
 
-  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|setup agy|uninstall [claude|agy]|pair|run|import|mcp>`);
+  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|setup agy|setup tailscale|devices list|devices revoke ID|devices revoke-all|uninstall [claude|agy]|pair|run|import|mcp>`);
   return 0;
 }
 
 if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` || process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
-  runCli().catch((err) => {
+  runCli().then(code => { process.exitCode = code; }).catch((err) => {
     console.error(err);
     process.exit(1);
   });

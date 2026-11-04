@@ -18,6 +18,8 @@ test('phone touch scroll keeps navigation visible and reaches the last card', as
   const page = await context.newPage();
   try {
     await page.goto(`http://127.0.0.1:${address.port}`);
+    await expect(page.getByTestId('ambient-view')).toBeVisible();
+    await page.getByRole('button', { name: 'Back to projects', exact: true }).click();
     await expect(page.getByTestId('run-card')).toHaveCount(5);
     const cdp = await context.newCDPSession(page);
     for (let swipe = 0; swipe < 4; swipe++) {
@@ -49,6 +51,8 @@ test('phone touch scroll keeps navigation visible and reaches the last card', as
     await page.getByRole('checkbox', { name: 'Codex', exact: true }).uncheck();
     await expect(page.getByTestId('run-card')).toHaveCount(0);
     await page.reload();
+        await expect(page.getByTestId('ambient-view')).toBeVisible();
+        await page.getByRole('button', { name: 'Back to projects', exact: true }).click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByText('Ferramentas exibidas (4/5)', { exact: true })).toBeVisible();
     await expect(page.getByTestId('run-card')).toHaveCount(0);

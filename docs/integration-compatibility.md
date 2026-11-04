@@ -46,7 +46,7 @@ Start the collector normally, then configure an MCP client to launch:
 ```json
 {
   "command": "node",
-  "args": ["P:/projects/ai_session_monitor/apps/collector/dist/cli.js", "mcp"]
+  "args": ["/absolute/path/to/agent-deck/apps/collector/dist/cli.js", "mcp"]
 }
 ```
 

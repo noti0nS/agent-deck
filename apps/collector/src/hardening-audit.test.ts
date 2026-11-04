@@ -186,7 +186,7 @@ describe('M8 Hardening, Extensibility, Failure-Injection & Observe-Only Audit', 
     const deleteRoutes = [...httpSource.matchAll(/app\.delete\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
     const patchRoutes = [...httpSource.matchAll(/app\.patch\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
 
-    expect(postRoutes).toEqual(['/api/pair', '/api/prefs']);
+    expect(postRoutes).toEqual(['/api/logout', '/api/pair', '/api/prefs']);
     expect(putRoutes).toEqual([]);
     expect(deleteRoutes).toEqual([]);
     expect(patchRoutes).toEqual([]);

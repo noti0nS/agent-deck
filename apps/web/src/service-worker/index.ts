@@ -1,11 +1,14 @@
 /// <reference types="@sveltejs/kit" />
 /// <reference lib="webworker" />
 
-import { build, files, version } from '$service-worker';
+import { immutable, assets, prerendered } from '$app/manifest';
+import { version } from '$app/env';
+import { resolve } from '$app/paths';
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `agent-deck-cache-${version}`;
-const ASSETS = [...build, ...files];
+const ASSETS = [...new Set([resolve('/'), ...[...immutable, ...assets, ...prerendered]
+  .map(({ path }) => resolve('/') + path.replace(/^\//, ''))])];
 
 sw.addEventListener('install', (event) => {
   async function addFilesToCache() {
@@ -39,7 +42,7 @@ sw.addEventListener('fetch', (event) => {
     }
     try {
       const response = await fetch(event.request);
-      if (response.status === 200) {
+      if (response.status === 200 && url.origin === sw.location.origin && ASSETS.includes(url.pathname)) {
         cache.put(event.request, response.clone());
       }
       return response;

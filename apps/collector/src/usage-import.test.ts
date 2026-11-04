@@ -20,8 +20,8 @@ describe('M6 Usage Queries & Idempotent History Backfill', () => {
       payload: {
         source: 'opencode',
         nativeId: 'prod_1',
-        projectPath: 'P:\\ProdigyR4Apps',
-        projectName: 'ProdigyR4Apps',
+        projectPath: 'P:\\sample-api',
+        projectName: 'sample-api',
         title: 'Productive Refactor',
         model: 'gpt-5',
         confidence: 'live',
@@ -58,8 +58,8 @@ describe('M6 Usage Queries & Idempotent History Backfill', () => {
       payload: {
         source: 'opencode',
         nativeId: 'runaway_1',
-        projectPath: 'P:\\vega-chat',
-        projectName: 'vega-chat',
+        projectPath: 'P:\\sample-chat',
+        projectName: 'sample-chat',
         title: 'Runaway Loop',
         model: 'claude-opus-4',
         confidence: 'live',

@@ -93,7 +93,7 @@ describe('CodexAdapter & Rollout Fixture Replay', () => {
 
     const run = engine.state.runs['codex:01a16919-codex-fixture'];
     expect(run).toBeDefined();
-    expect(run.projectName).toBe('vega-chat');
+    expect(run.projectName).toBe('sample-chat');
     expect(run.subtitle).toBe('Audit and optimize SSE reconnect logic');
     expect(run.model).toBe('gpt-5');
     expect(run.usage.tokensIn).toBe(40_000);

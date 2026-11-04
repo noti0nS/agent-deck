@@ -1,205 +1,134 @@
-# agent-deck
+# Agent Deck
 
-A tablet-first observability deck for AI coding agents. Watch what your agents are
-doing — from your desk or from the couch — without touching them.
+An experimental, local-first dashboard for AI coding agents. Follow OpenCode,
+Claude Code, Codex and Antigravity sessions from your PC, tablet or phone: activity,
+latest messages, attention requests, file changes and token usage.
 
-agent-deck observes [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/code),
-[Codex](https://openai.com/codex) and Antigravity sessions, normalises them into one
-event stream, and renders it as a glanceable deck: what is running, what it is doing
-right now, how much it costs, and what it touched.
+![Synthetic tablet dashboard](docs/screenshots/tablet.png)
 
-```
- agent CLIs                     collector (:4100 http+sse, :4101 udp)
- ┌──────────┐                   ┌──────────────────────────────────────┐
- │ OpenCode │──┐                │ adapters ──▶ reducer ──▶ SQLite      │
- │ Claude   │──┼──▶ events ────▶│                 │                    │──▶ deck (browser)
- │ Codex    │──┤                │                 └──▶ SSE  ──────────▶│    tablet / phone
- │ Antigrav │──┘                └──────────────────────────────────────┘
- └──────────┘                            ▲
-                                  hook shim (Go, UDP)
-```
-
-## Design constraints
-
-- **Observe-only.** agent-deck never drives your agents. The single exception is
-  installing Claude Code hooks, which shows a diff, backs up the original settings,
-  tags every entry with `_source: "agent-deck"`, and reverses cleanly via
-  `agent-deck uninstall`.
-- **Never in the hot path.** Claude hooks fire on every tool call, so the shim is a
-  small Go binary that sends one UDP datagram and exits 0 within a hard 10 ms
-  deadline — fire-and-forget, fail-open, no retries.
-- **No public bind.** The collector refuses to listen on `0.0.0.0`/`::`; it binds
-  loopback or Tailscale by default; an explicit private LAN address can be enabled.
-- **Redaction is built in.** `@agent-deck/redact` scrubs credentials and sensitive
-  paths (`~/.ssh`, `~/.aws`, `.codex/auth.json`, gcloud, kube config, …) before
-  events are stored.
-
-## Requirements
-
-- Node.js 22+
-- Go 1.22+ — only to build the Claude hook shim (`npm run build:hooks`). Set
-  `AGENT_DECK_SKIP_HOOKS=1` to skip it.
-- Optional: Tailscale, for the tablet pairing flow
+Agent Deck observes your agents; it does not submit prompts, answer approvals or
+change their work. Native hook installation is explicit and reversible.
 
 ## Quick start
 
-```bash
-npm install
+Requirements: Git, **Node.js 22.17+ or 24**, npm 10+, and Go 1.22+ for the hook shim.
+Native Node modules may require a C++ toolchain if prebuilt binaries are unavailable.
+
+```sh
+git clone https://github.com/noti0nS/agent-deck.git
+cd agent-deck
+npm ci
 npm run build
-npm run agent-deck start
+npm run agent-deck -- start
 ```
 
-Open <http://127.0.0.1:4100>. To use it from a tablet:
+Open <http://127.0.0.1:4100>. On Windows use `npm.cmd` if PowerShell blocks `npm`.
+The first start imports up to 90 days of available history into a local SQLite
+DB. Set `AGENT_DECK_IMPORT_HISTORY=0` to skip bulk backfill. Current/recent agent
+records may still be observed. Read [privacy](docs/privacy.md) before sharing access.
 
-```bash
-npm run agent-deck pair   # prints a QR code + 5-minute pairing code
+Runtime bundles, when published in [Releases](https://github.com/noti0nS/agent-deck/releases),
+include the compiled app and Go shim. They need Node and `npm ci --omit=dev`,
+but no Go/TypeScript build. See [installation](docs/installation.md).
+
+## Tablet access
+
+**Tailscale:** with Tailscale installed and signed in on both devices, run
+`npm run agent-deck -- setup tailscale` and open the printed HTTPS URL. Your
+Tailscale access rules authorize access; no Agent Deck pairing is required.
+Setup refuses to replace a different service on the selected port. Starting the
+collector does not modify Tailscale Serve.
+
+**Private LAN without Tailscale:** start with `AGENT_DECK_LAN_HOST` set to the
+PC's private IPv4 address. Windows example (replace the address):
+
+```powershell
+./start-local-wifi.ps1 -LanAddress 192.168.1.23
 ```
 
-## CLI
+Then run `npm run agent-deck -- pair` in another terminal and scan the QR. It uses
+the running collector's recorded LAN address, never localhost. Each code is
+single-use and valid for five minutes. LAN HTTP is for trusted networks; HTTPS
+is required for normal PWA installation. [Detailed setup](docs/installation.md).
 
-### Optional local Wi-Fi
+Do not expose the collector through public proxies, port forwarding or Tailscale
+Funnel. [Security model](SECURITY.md).
 
-Set `AGENT_DECK_LAN_HOST` to the PC's private IPv4 address before starting.
-This adds a listener on port 4100 while preserving loopback and Tailscale.
-On this PC run `./start-local-wifi.ps1` after stopping any existing collector,
-then open `http://192.168.0.3:4100`. Allow TCP 4100 from the local subnet in
-Windows Firewall. Update the script and rule if DHCP changes the PC's address.
-Run `npm run agent-deck -- pair` and enter its code on the LAN page, ignoring
-the printed Tailscale URL. LAN data requires pairing. HTTP is for trusted home
-Wi-Fi; browser installation/service-worker features still require HTTPS.
+## Commands
 
+Use `npm run agent-deck -- COMMAND` from source, or
+`node apps/collector/dist/cli.js COMMAND` from a runtime bundle.
 
-Every command runs through `npm run agent-deck -- <cmd>`, or `agent-deck` once the
-package is linked.
+| Command | Purpose |
+| --- | --- |
+| `start` | Run collector and dashboard |
+| `status` | Check configured address/port; exit 1 if offline |
+| `doctor` | Report actual collector reachability and adapter diagnostics |
+| `setup claude [--dry-run]` | Install reversible Claude observer hooks |
+| `setup agy [--dry-run]` | Install reversible Antigravity observer hooks |
+| `setup tailscale` | Explicitly configure trusted HTTPS access |
+| `uninstall [claude\|agy]` | Remove only Agent Deck hooks |
+| `pair` | Generate a single-use LAN pairing code and QR |
+| `devices list` | List paired LAN browsers (no token values) |
+| `devices revoke ID` | Revoke one LAN device |
+| `devices revoke-all` | Revoke all LAN devices and outstanding code |
+| `import` | Import up to 90 days of available history |
+| `probe --source AGENT --tail N` | Inspect normalized recent evidence in memory |
+| `run -- CLI [args...]` | Observe an explicitly launched CLI through a PTY |
+| `mcp` | Read-only stdio bridge for an MCP client |
 
-| Command | Does |
-|---|---|
-| `start` | Run the collector: adapters, HTTP + SSE, static deck |
-| `status` | Report whether the collector is answering on `:4100` |
-| `doctor` | Diagnose environment, adapters, DB size and reachability |
-| `probe [--source <agent>] [--tail N]` | Replay an agent's recent events in-process without persisting |
-| `setup claude [--dry-run]` | Install Claude Code hooks (diff + backup, reversible) |
-| `setup agy [--dry-run]` | Install Antigravity observer hooks with backup |
-| `uninstall [claude\|agy]` | Remove only the selected Agent Deck hooks (defaults to Claude) |
-| `import` | Backfill up to 90 days of history into the local DB |
-| `run -- <cli> [args...]` | Wrap any CLI in a PTY so a generic adapter can observe it |
-| `pair` | Generate a pairing code and QR for the tablet |
-
-## Adapters
-
-| Adapter | Source |
-|---|---|
-| `opencode` | Existing server API (`/session/status`, session metadata/messages) + SSE; local DB fallback |
-| `claude` | `claude agents --json --all` inventory + official lifecycle/message hooks; transcript enrichment |
-| `codex` | Existing app-server daemon socket: runtime status, identity, latest messages; rollout fallback |
-| `agy` | Official lifecycle hooks over loopback UDP; summaries/transcripts for enrichment |
-| `pty` | Agent-agnostic PTY wrapper for anything else |
-
-Each adapter is read-only against the agent's own files. See
-[`docs/adapter-authoring.md`](docs/adapter-authoring.md) to add another.
-
-The dashboard selects the latest top-level conversation per project and tool,
-and displays its latest message. Tool calls and older conversations remain in
-the detail/ledger views. Starting, running or compacting states without fresh
-session evidence expire after the configured stall interval (120 seconds by
-default) to "No activity signal"; this does not claim the agent process exited.
-Authoritative OpenCode and Codex runtime responses keep silent long tasks active.
-Local records alone never prove that an application is open. Existing stored
-states are reconciled on startup.
-
-OpenCode monitoring connects to an already running server. Set
-`OPENCODE_SERVER_URL` for a different port, including a TUI server's assigned
-port. The monitor never starts another OpenCode instance to infer activity.
-
-Codex discovers an already running daemon using `codex app-server daemon version`
-and uses the official `app-server proxy --sock` transport on Windows. It only
-allows initialization and thread loaded-list/read/turn-history requests; it never
-starts or resumes a thread, sends a prompt, or answers an approval request. Loaded
-idle threads are distinguished from active threads. If the daemon is unavailable,
-rollout evidence remains available with its normal expiry.
-
-Install native hooks after building the shim:
-
-```bash
-npm run agent-deck -- setup claude
-npm run agent-deck -- setup agy
-```
-
-Claude hooks live in `~/.claude/settings.json`; Antigravity hooks live under the
-`agent-deck-observer` entry in `~/.gemini/config/hooks.json`. Setup preserves other
-entries, creates backups and is idempotent. Malformed configuration is rejected
-instead of overwritten. Claude command hooks use executable/argument form (no
-shell), tested with Claude Code 2.1.302. Antigravity configuration is validated
-against its CLI plugin schema. Existing Antigravity sessions may need to reload
-their hook configuration; installation alone does not prove hot reload.
-
-Claude also polls the supported `claude agents --json --all` interface. A row's
-persisted task state is not enough to claim active execution: the CLI must report
-a live process and `busy`. A successful inventory can confirm disappearance;
-a failed command is treated as unknown. `AGENT_DECK_CLAUDE_COMMAND` can select
-the installed executable when it is not on PATH. No supervisor, agent session or
-prompt is started by the JSON inventory path.
-
-The shim sends bounded valid JSON to loopback only (Claude port 4101,
-Antigravity port 4102), emits no stdout decisions, and exits successfully even
-if telemetry is unavailable, with a 100 ms self-timeout. Tool calls retain the native conversation identity.
-Lifecycle hooks override delayed transcript/DB snapshots; transcripts can still
-enrich usage and message previews. Hook events do not prove indefinite liveness
-after a crash, so uncertain stale activity expires rather than remaining Running.
-
-Contracts: [Codex app-server](https://developers.openai.com/codex/app-server),
-[Claude hooks](https://code.claude.com/docs/en/hooks),
-[Antigravity hooks](https://antigravity.google/docs/hooks?tab=cli).
+Build the shim before hook setup. Setup preserves other hook entries, backs up
+settings and rejects malformed configuration. Hooks emit no decisions and exit
+successfully if telemetry is unavailable, with a 100 ms self-timeout. Existing
+agent sessions may need to reload their configuration.
 
 ## Configuration
 
+Environment variables are read from the launching process, not automatically
+from a `.env` file. Set custom DB/port values consistently in CLI/MCP terminals.
+
 | Variable | Default | Purpose |
-|---|---|---|
-| `AGENT_DECK_PORT` | `4100` | HTTP + SSE port |
-| `AGENT_DECK_HOST` | `127.0.0.1` | Bind address; `0.0.0.0` is refused by design |
-| `AGENT_DECK_DB_PATH` | `~/.agent-deck/collector.db` | SQLite location |
-| `AGENT_DECK_UDP_ADDR` | `127.0.0.1:4101` | Hook shim ingest address |
-| `AGENT_DECK_SKIP_HOOKS` | unset | `1` skips building the Go shim |
+| --- | --- | --- |
+| `AGENT_DECK_PORT` | `4100` | Collector HTTP/SSE port |
+| `AGENT_DECK_HOST` | `127.0.0.1` | Primary bind; wildcard bind is refused |
+| `AGENT_DECK_LAN_HOST` | unset | Additional explicit private IPv4 listener |
+| `AGENT_DECK_SERVE_HTTPS_PORT` | `443` | HTTPS port for explicit Tailscale setup |
+| `AGENT_DECK_DB_PATH` | `~/.agent-deck/collector.db` | Local data and device records |
+| `AGENT_DECK_IMPORT_HISTORY` | enabled | `0` skips automatic bulk history import |
+| `AGENT_DECK_UDP_ADDR` | `127.0.0.1:4101` | Claude shim ingest address |
+| `AGENT_DECK_SKIP_HOOKS` | unset | `1` skips compiling the shim |
 | `OPENCODE_SERVER_URL` | `http://127.0.0.1:4096` | Existing OpenCode server to observe |
-| `AGENT_DECK_CLAUDE_COMMAND` | `claude.exe` on Windows, `claude` elsewhere | Installed CLI used only for read-only session inventory |
+| `AGENT_DECK_CLAUDE_COMMAND` | platform CLI name | Installed Claude executable |
 
-## Repository layout
+## Compatibility
 
-```
-apps/
-  collector/   Fastify server, adapters, SQLite store, CLI
-  web/         SvelteKit + Tailwind deck (static build)
-packages/
-  core/        event reducer and status engine
-  protocol/    shared event contracts
-  pricing/     token cost tables
-  redact/      sensitive-path and pattern scrubbing
-tools/
-  doctor/      environment diagnostics
-  hook-shim/   Go ingest shim — compiled at build time, never committed
-e2e/           Playwright tests for the deck
-fixtures/      recorded session data, one folder per agent
-docs/          implementation plan, adapter authoring and research notes
-```
+Adapters use existing runtime evidence and file fallbacks. Missing optional agents
+leave their adapters unavailable. Stale file records alone do not prove an agent
+is running; silent long tasks need authoritative runtime evidence. Unknown model
+prices are not invented, and estimated costs can differ from provider billing.
 
-## Development
+See the [platform/agent matrix](docs/compatibility.md),
+[integration contracts and MCP](docs/integration-compatibility.md), and
+[fixture provenance](fixtures/manifest.json). CI targets Windows, Linux and macOS;
+check actual results before treating a platform or native CLI version as verified.
 
-```bash
-npm run build        # hook shim, then all workspaces
-npm run build:hooks  # Go shim only (GOOS/GOARCH respected for cross-compiling)
-npm test             # Vitest
-npm run test:e2e     # Playwright
-npm run typecheck    # tsc + svelte-check
+## Development and contributions
+
+```sh
+npm run build
+npm run typecheck
+npm test
+npm run test:hooks
+npx playwright install chromium
+npm run test:e2e
 ```
 
-The hook shim is a build artifact and is deliberately not in git; `npm run build`
-produces it. The shim integration test skips until it has been built.
+[Contributing](CONTRIBUTING.md) ? [Adapter authoring](docs/adapter-authoring.md) ?
+[Release procedure](docs/releasing.md) ? [Changelog](CHANGELOG.md) ?
+[Security reports](SECURITY.md) ? [Dependency review](docs/dependency-review.md)
 
-Further reading: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md),
-[`docs/adapter-research.md`](docs/adapter-research.md).
+Code lives in `apps/collector` and `apps/web`; shared logic is in `packages`.
+`tools/hook-shim` contains the Go hook, and `tools/doctor` the diagnostics formatter.
+Tests and screenshots use synthetic data. Design research is not a compatibility claim.
 
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-Model catalog caching, MCP setup, and validation boundaries: [integration compatibility](docs/integration-compatibility.md).
+MIT ? see [LICENSE](LICENSE).

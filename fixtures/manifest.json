@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "kind": "synthetic-contract-fixtures",
+  "nativeCompatibilityCertified": false,
+  "fixtures": [
+    { "source": "opencode", "files": ["opencode/events.jsonl", "opencode/sessions.json"], "cliVersion": null, "captureDate": null, "expected": "session identity, activity and usage" },
+    { "source": "claude", "files": ["claude/session-fixture-1.jsonl"], "cliVersion": null, "captureDate": null, "expected": "transcript previews, tools and usage" },
+    { "source": "codex", "files": ["codex/rollout-fixture-1.jsonl"], "cliVersion": null, "captureDate": null, "expected": "identity, compaction, lifecycle and usage" },
+    { "source": "agy", "files": ["agy/conversation-fixture.json"], "cliVersion": null, "captureDate": null, "expected": "conversation metadata and permission state" },
+    { "source": "pty", "files": ["pty/cursor-agent-profile.json"], "cliVersion": null, "captureDate": null, "expected": "heuristic profile parsing" }
+  ]
+}

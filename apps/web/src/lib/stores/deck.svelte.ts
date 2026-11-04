@@ -13,7 +13,6 @@ import {
 
 export type ViewName = 'ambient' | 'deck' | 'usage' | 'ledger' | 'detail';
 
-const VIEW_STORAGE_KEY = 'agent_deck_active_view';
 
 class DeckClientStore {
   public state = $state<DeckState>(createInitialDeckState());
@@ -29,7 +28,7 @@ class DeckClientStore {
     const cards = computeDeckAggregates(Object.fromEntries(this.dashboardSessions.map(r => [r.id, r])), this.state.prefs.burnRateAlarmUsdPerMin);
     return { ...totals, activeCount: cards.activeCount, waitingCount: cards.waitingCount, stalledCount: cards.stalledCount, failedCount: cards.failedCount };
   }
-  public activeView = $state<ViewName>('deck');
+  public activeView = $state<ViewName>('ambient');
   public previousView = $state<ViewName>('deck');
   public selectedRunId = $state<string | null>(null);
   public connectionStatus = $state<'connected' | 'reconnecting' | 'recovered'>('connected');
@@ -45,6 +44,9 @@ class DeckClientStore {
   public waitingAnnouncement = $state<string>('');
 
   private eventSource: EventSource | null = null;
+  private connectionEpoch = 0;
+  public loggingOut = $state(false);
+  public logoutError = $state('');
   private lastEtag: string | null = null;
   private lastInteractionAt = Date.now();
   private clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -68,13 +70,10 @@ class DeckClientStore {
       const saved = JSON.parse(localStorage.getItem('agent_deck_sources') ?? 'null');
       if (Array.isArray(saved)) this.visibleSources = saved.filter((s): s is Source => ['opencode','claude','codex','agy','pty'].includes(s));
     } catch {}
-    const savedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewName | null;
-    if (savedView && ['ambient', 'deck', 'usage', 'ledger'].includes(savedView)) {
-      this.activeView = savedView;
-    }
 
     this.fetchSnapshot().then(() => {
       this.connectStream();
+      if (!this.needsPairing && this.activeView === 'ambient') this.requestWakeLock();
     });
 
     const onVisibility = () => {
@@ -93,9 +92,6 @@ class DeckClientStore {
 
     const onInteract = () => {
       this.lastInteractionAt = Date.now();
-      if (this.activeView === 'ambient') {
-        this.setView('deck');
-      }
     };
     window.addEventListener('pointerdown', onInteract, { passive: true });
     window.addEventListener('keydown', onInteract);
@@ -134,9 +130,7 @@ class DeckClientStore {
       return;
     }
     this.activeView = view;
-    if (view !== 'detail' && typeof window !== 'undefined') {
-      localStorage.setItem(VIEW_STORAGE_KEY, view);
-    }
+    this.lastInteractionAt = Date.now();
     if (view === 'ambient') {
       this.requestWakeLock();
     } else {
@@ -150,12 +144,15 @@ class DeckClientStore {
   }
 
   public async fetchSnapshot(): Promise<void> {
+    if (this.loggingOut) return;
+    const epoch = this.connectionEpoch;
     try {
       const headers: Record<string, string> = {};
       if (this.lastEtag) {
         headers['If-None-Match'] = this.lastEtag;
       }
       const res = await fetch('/api/snapshot', { headers });
+      if (epoch !== this.connectionEpoch) return;
       if (res.status === 401) {
         this.needsPairing = true;
         return;
@@ -170,6 +167,7 @@ class DeckClientStore {
       if (etag) this.lastEtag = etag;
 
       const data = await res.json();
+      if (epoch !== this.connectionEpoch) return;
       const runsMap: Record<string, AgentRun> = {};
       for (const r of data.runs ?? []) {
         runsMap[r.id] = r;
@@ -196,12 +194,12 @@ class DeckClientStore {
       }
       this.syncWaitingAnnouncements();
     } catch {
-      this.connectionStatus = 'reconnecting';
+      if (epoch === this.connectionEpoch) this.connectionStatus = 'reconnecting';
     }
   }
 
   public connectStream(): void {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this.needsPairing || this.loggingOut) return;
     if (this.eventSource) {
       this.eventSource.close();
     }
@@ -209,8 +207,10 @@ class DeckClientStore {
     const url = `/api/stream?lastEventId=${this.state.seq}`;
     const es = new EventSource(url);
     this.eventSource = es;
+    const epoch = this.connectionEpoch;
 
     es.onopen = () => {
+      if (epoch !== this.connectionEpoch) return;
       if (this.connectionStatus === 'reconnecting') {
         this.connectionStatus = 'recovered';
         setTimeout(() => {
@@ -224,6 +224,7 @@ class DeckClientStore {
     };
 
     es.onmessage = (event) => {
+      if (epoch !== this.connectionEpoch) return;
       try {
         const frame = JSON.parse(event.data) as WireFrame;
         const prevWaitingCount = this.visibleAggregates.waitingCount;
@@ -240,12 +241,13 @@ class DeckClientStore {
     };
 
     es.onerror = async () => {
+      if (epoch !== this.connectionEpoch) return;
       this.connectionStatus = 'reconnecting';
       es.close();
       // Check if 409 gap resync is needed by fetching snapshot before reconnecting
       await this.fetchSnapshot();
       setTimeout(() => {
-        this.connectStream();
+        if (epoch === this.connectionEpoch) this.connectStream();
       }, 1500);
     };
   }
@@ -265,7 +267,7 @@ class DeckClientStore {
     const idleSec = (this.now - this.lastInteractionAt) / 1000;
     const targetIdle = this.state.prefs.ambientIdleSeconds ?? 180;
     if (
-      this.activeView === 'deck' &&
+      !this.needsPairing && this.activeView === 'deck' &&
       idleSec >= targetIdle &&
       this.visibleAggregates.waitingCount === 0
     ) {
@@ -314,6 +316,8 @@ class DeckClientStore {
     });
     if (res.ok) {
       this.needsPairing = false;
+      this.lastEtag = null;
+      this.setView('ambient');
       await this.fetchSnapshot();
       this.connectStream();
       return true;
@@ -321,7 +325,35 @@ class DeckClientStore {
     return false;
   }
 
+  public async logout(): Promise<void> {
+    if (this.loggingOut) return;
+    this.loggingOut = true;
+    this.logoutError = '';
+    this.connectionEpoch++;
+    this.eventSource?.close();
+    this.eventSource = null;
+    try {
+      const res = await fetch('/api/logout', { method: 'POST' });
+      if (!res.ok) throw new Error('Logout failed');
+      this.state = createInitialDeckState();
+      this.lastEtag = null;
+      this.selectedRunId = null;
+      this.knownWaitingIds.clear();
+      this.waitingAnnouncement = '';
+      this.needsPairing = true;
+      this.connectionStatus = 'connected';
+      await this.releaseWakeLock();
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    } catch {
+      this.logoutError = 'Could not log out. Please try again.';
+    } finally {
+      this.loggingOut = false;
+      if (!this.needsPairing) this.connectStream();
+    }
+  }
+
   private async requestWakeLock(): Promise<void> {
+    if (this.needsPairing || this.loggingOut || this.wakeLockSentinel && !this.wakeLockSentinel.released) return;
     if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
       try {
         this.wakeLockSentinel = await navigator.wakeLock.request('screen');

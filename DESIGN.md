@@ -27,3 +27,12 @@ Check 390x844 and 412x915 phones plus 1024x768 and 1280x800 tablets. Exercise to
 
 ## Fidelity correction
 The authoritative screen is reproduced with a fixed 56px header, gear menu, inline project status filters, and a grid containing five project cards plus Throughput & Ledger. Two columns from 768px and three from 1280px follow the original HTML. There is no bottom navigation and no source-selector strip on the dashboard. The gear menu holds source visibility, secondary views and the full settings link. Projects group sessions by workspace path; their session selector opens the corresponding context. Observed telemetry replaces illustrative data. The earlier lower navigation and wide cards are superseded.
+
+## Monitor controls update
+The monitor-panel direction supersedes the rounded card styling: squared frames, agent channel headers, an inset message screen, and aligned duration/token/cost readings. Keep latest conversation messages primary, with current activity as a fallback. Unknown costs remain a dash, never a fabricated zero.
+
+Opening or reloading Agent Deck starts in ambient mode. Empty-space clicks and ordinary keypresses do not exit ambient; use Back to projects. New attention events still wake the deck. A bottom control row offers fullscreen (where supported), view switching, and Log out. Fullscreen is explicitly requested by a user click and remains separate from ambient mode.
+
+Logout clears this browser's pairing cookie, disconnects its stream, and returns to pairing. An HttpOnly logged-out marker prevents the localhost authentication shortcut from reconnecting automatically; successful pairing clears it. Other devices retain their existing pairing. This is browser disconnection, not global token rotation.
+
+Design references: https://github.com/aristocratos/btop#screenshots and https://grafana.com/docs/grafana/latest/visualizations/dashboards/use-dashboards/.

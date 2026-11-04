@@ -1,4 +1,4 @@
-{"timestamp":"2026-10-23T14:10:00.000Z","ordinal":0,"type":"session_meta","payload":{"id":"01a16919-codex-fixture","session_id":"01a16919-codex-fixture","cwd":"T:\\Web\\vega-chat","model_provider":"openai"}}
+{"timestamp":"2026-10-23T14:10:00.000Z","ordinal":0,"type":"session_meta","payload":{"id":"01a16919-codex-fixture","session_id":"01a16919-codex-fixture","cwd":"T:\\Web\\sample-chat","model_provider":"openai"}}
 {"timestamp":"2026-10-23T14:10:01.000Z","ordinal":1,"type":"event_msg","payload":{"type":"thread_settings_applied","thread_id":"01a16919-codex-fixture","thread_settings":{"model":"gpt-5"}}}
 {"timestamp":"2026-10-23T14:10:02.000Z","ordinal":2,"type":"event_msg","payload":{"type":"thread_goal_updated","thread_id":"01a16919-codex-fixture","goal":"Audit and optimize SSE reconnect logic"}}
 {"timestamp":"2026-10-23T14:10:03.000Z","ordinal":3,"type":"event_msg","payload":{"type":"task_started","turn_attribution":{"turn_id":"turn_1"}}}

@@ -1,7 +1,7 @@
 ﻿<script lang="ts">
-  import { deckStore } from '$lib/stores/deck.svelte';
-  import RunCard from '$lib/components/RunCard.svelte';
-  import TelemetryCard from '$lib/components/TelemetryCard.svelte';
+  import { deckStore } from '#lib/stores/deck.svelte.js';
+  import RunCard from '#lib/components/RunCard.svelte';
+  import TelemetryCard from '#lib/components/TelemetryCard.svelte';
   import type { AgentRun } from '@agent-deck/core';
   let filter = $state<'all' | 'waiting' | 'running'>('all');
   let selectedSessions = $state<Record<string,string>>({});
