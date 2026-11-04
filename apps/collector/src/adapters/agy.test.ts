@@ -5,15 +5,62 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CollectorEngine } from '../http.js';
 import { CollectorStore } from '../store.js';
-import { AgyAdapter } from './agy.js';
+import { AgyAdapter, readAgyLatestMessage } from './agy.js';
 
 describe('AgyAdapter & SQLite Fixture Replay', () => {
+  it('does not treat an empty conversation database as an active session, and can observe its later activity', () => {
+    const tempBase = join(tmpdir(), `agent-deck-agy-empty-${Date.now()}`);
+    const convDir = join(tempBase, 'conversations');
+    mkdirSync(convDir, { recursive: true });
+    const dbPath = join(convDir, 'empty.db');
+    const db = new Database(dbPath);
+    db.exec('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, has_subtrajectory INTEGER, metadata BLOB, error_details BLOB, permissions BLOB, task_details BLOB, step_payload BLOB)');
+    const store = new CollectorStore(':memory:');
+    const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+    const adapter = new AgyAdapter({ baseDir: tempBase });
+    adapter['ctx'] = {
+      emit: ev => engine.ingest(ev), reportHealth: h => engine.reportAdapterHealth(h),
+      getSetting: k => store.getSetting(k), setSetting: (k, v) => store.setSetting(k, v)
+    };
+    try {
+      adapter.ingestConversationDb('empty', dbPath, undefined, -1, Date.now() - 273 * 3_600_000);
+      expect(engine.state.runs['agy:empty'].status).toBe('detached');
+      expect(engine.state.aggregates.activeCount).toBe(0);
+      db.prepare('INSERT INTO steps (idx, status, metadata) VALUES (?, ?, ?)')
+        .run(0, 2, 'call_123  run_command  {"CommandLine":"test"}');
+      adapter.ingestConversationDb('empty', dbPath);
+      expect(engine.state.runs['agy:empty'].status).toBe('running');
+      expect(Object.keys(engine.state.runs)).toEqual(['agy:empty']);
+    } finally { db.close(); store.close(); rmSync(tempBase, { recursive: true, force: true }); }
+  });
+
+  it('reads the latest assistant message instead of a tool call or system step', () => {
+    const tempBase = join(tmpdir(), `agent-deck-agy-message-${Date.now()}`);
+    mkdirSync(tempBase, { recursive: true });
+    const transcript = join(tempBase, 'transcript.jsonl');
+    const ts = '2026-11-04T12:00:00Z';
+    writeFileSync(transcript, [
+      { step_index: 1, type: 'PLANNER_RESPONSE', created_at: ts, content: 'First message' },
+      { step_index: 2, type: 'PLANNER_RESPONSE', created_at: ts, tool_calls: [{ name: 'run_command' }] },
+      { step_index: 3, type: 'PLANNER_RESPONSE', created_at: ts, content: 'Latest assistant message' },
+      { step_index: 4, type: 'SYSTEM_MESSAGE', created_at: ts, content: 'Internal system text' }
+    ].map(x => JSON.stringify(x)).join('\n') + '\n{"type":');
+    try {
+      expect(readAgyLatestMessage(transcript)).toEqual({ id: '3', preview: 'Latest assistant message', ts: Date.parse(ts) });
+    } finally { rmSync(tempBase, { recursive: true, force: true }); }
+  });
+
   it('tracks agy conversation step-by-step, ignores stale presence/*.lock files, links parent_references, and keeps usage precision none when undecodable', () => {
     const tempBase = join(tmpdir(), `agent-deck-agy-test-${Date.now()}`);
     const convDir = join(tempBase, 'conversations');
     const presenceDir = join(tempBase, 'presence');
+    const transcriptDir = join(tempBase, 'brain', 'conv-agy-1', '.system_generated', 'logs');
     mkdirSync(convDir, { recursive: true });
     mkdirSync(presenceDir, { recursive: true });
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(join(transcriptDir, 'transcript.jsonl'), JSON.stringify({
+      step_index: 0, type: 'PLANNER_RESPONSE', created_at: '2026-10-23T12:00:00Z', content: 'Checking the hash implementation.'
+    }) + '\n');
 
     // Create a stale presence lock from months ago that MUST NOT produce a phantom session (§5.5, M5 exit)
     writeFileSync(join(presenceDir, 'stale-phantom-id.lock'), 'pid=99999', 'utf8');
@@ -105,6 +152,7 @@ describe('AgyAdapter & SQLite Fixture Replay', () => {
     expect(run.projectName).toBe('ProdigyR3Apps');
     expect(run.status).toBe('waiting');
     expect(run.attention?.summary).toContain('Allow command execution: dotnet test');
+    expect(run.recentMessages?.[0].preview).toBe('Checking the hash implementation.');
     // Honest usage precision: 'none' rather than fabricated $0.00
     expect(run.usage.precision).toBe('none');
     expect(run.usage.costUsd).toBeUndefined();
@@ -119,6 +167,7 @@ describe('AgyAdapter & SQLite Fixture Replay', () => {
     adapter.pollConversations();
     expect(engine.state.runs['agy:conv-agy-1'].status).toBe('idle');
     expect(engine.state.runs['agy:conv-agy-1'].attention).toBeUndefined();
+    expect(engine.state.runs['agy:conv-agy-1'].recentMessages).toHaveLength(1);
     // Replaying history must not resurrect the completed permission.
     adapter.ingestConversationDb('conv-agy-1', join(convDir, 'conv-agy-1.db'));
     expect(engine.state.runs['agy:conv-agy-1'].status).toBe('idle');

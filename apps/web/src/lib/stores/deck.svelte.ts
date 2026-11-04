@@ -3,6 +3,7 @@ import {
   computeDeckAggregates,
   type Source,
   getSortedDeckRuns,
+  getDashboardSessions,
   reduceWireFrame,
   type AgentRun,
   type DeckPrefs,
@@ -22,7 +23,12 @@ class DeckClientStore {
     try { localStorage.setItem('agent_deck_sources', JSON.stringify(this.visibleSources)); } catch {}
     if (this.selectedRunId && !this.visibleSources.includes(this.state.runs[this.selectedRunId]?.source)) this.backFromDetail();
   }
-  public get visibleAggregates() { return computeDeckAggregates(Object.fromEntries(this.sortedRuns.map(r => [r.id, r])), this.state.prefs.burnRateAlarmUsdPerMin); }
+  public get dashboardSessions() { return getDashboardSessions(this.sortedRuns); }
+  public get visibleAggregates() {
+    const totals = computeDeckAggregates(Object.fromEntries(this.sortedRuns.map(r => [r.id, r])), this.state.prefs.burnRateAlarmUsdPerMin);
+    const cards = computeDeckAggregates(Object.fromEntries(this.dashboardSessions.map(r => [r.id, r])), this.state.prefs.burnRateAlarmUsdPerMin);
+    return { ...totals, activeCount: cards.activeCount, waitingCount: cards.waitingCount, stalledCount: cards.stalledCount, failedCount: cards.failedCount };
+  }
   public activeView = $state<ViewName>('deck');
   public previousView = $state<ViewName>('deck');
   public selectedRunId = $state<string | null>(null);

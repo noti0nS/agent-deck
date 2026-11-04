@@ -27,7 +27,7 @@ export const STATUS_PRIORITY: Record<RunStatus, number> = {
 };
 
 export interface LivenessInput {
-  alive: boolean;
+  alive: boolean | undefined;
   now: number;
   stallThresholdMs?: number; // default 120_000 (120 s)
   doneToIdleMs?: number;     // default 90_000 (90 s)
@@ -136,7 +136,14 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
 
   switch (env.type) {
     case 'run.started': {
-      if (from === 'detached') {
+      if ((env.payload as RunStartedPayload).resumed) {
+        run.endedAt = undefined;
+        run.doneAt = undefined;
+        run.attention = undefined;
+        run.currentStep = undefined;
+        to = 'idle';
+        reason = 'session_opened';
+      } else if (from === 'detached') {
         // Reappeared
         to = prev.previousWorkingStatus ?? 'idle';
         reason = 'reconnected';
@@ -346,7 +353,17 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
     case 'state.changed': {
       const p = env.payload as { from: RunStatus; to: RunStatus; reason: string; confidence?: Confidence };
       // Sticky waiting and failed rules:
-      if (from === 'waiting' && p.to !== 'waiting' && p.reason !== 'attention.cleared' && p.to !== 'running') {
+      if (p.reason === 'codex_runtime' || p.reason === 'native_session_inventory') {
+        to = p.to;
+        reason = p.reason;
+        if (to !== 'waiting') run.attention = undefined;
+        if (to === 'idle' || to === 'detached') run.currentStep = undefined;
+      } else if (p.to === 'detached' && ['liveness_lost', 'activity_unconfirmed'].includes(p.reason)) {
+        to = 'detached';
+        run.previousWorkingStatus = 'idle';
+        run.attention = undefined;
+        run.currentStep = undefined;
+      } else if (from === 'waiting' && p.to !== 'waiting' && p.reason !== 'attention.cleared' && p.to !== 'running') {
         to = 'waiting';
       } else if (from === 'failed' && p.to !== 'running' && p.to !== 'idle') {
         to = 'failed';
@@ -356,6 +373,9 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
       }
       if (p.confidence) {
         run.confidence = p.confidence;
+      }
+      if (p.reason === 'agy_invocation_activity') {
+        run.lastActivityAt = Math.max(run.lastActivityAt, env.ts);
       }
       break;
     }
@@ -379,7 +399,7 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
 
 /**
  * Evaluates time-based and liveness-based state transitions:
- * - No event for > 120s while `running` and liveness ok -> `stalled`
+ * - No activity for > 120s while working: confirmed alive -> stalled; unknown -> detached
  * - `done` for > 90s while session alive -> `idle`
  * - Liveness lost without end event -> `detached`
  * - Liveness lost, then reappears -> resume from last known (never fabricate `running`)
@@ -400,22 +420,26 @@ export function evaluateLivenessAndTimers(prev: AgentRun, input: LivenessInput):
     })
   };
 
-  if (!input.alive) {
+  const working = ['starting', 'running', 'compacting', 'stalled'].includes(from);
+  const expired = input.now - prev.lastActivityAt > stallThresholdMs;
+  if (input.alive === false || (input.alive === undefined && working && expired)) {
     if (from !== 'done' && from !== 'failed' && from !== 'detached' && !prev.endedAt) {
-      run.previousWorkingStatus = from === 'running' ? 'idle' : from;
+      run.previousWorkingStatus = 'idle';
+      run.currentStep = undefined;
+      run.attention = undefined;
       to = 'detached';
-      reason = 'liveness_lost';
+      reason = input.alive === false ? 'liveness_lost' : 'activity_unconfirmed';
     }
   } else {
     // Process/session is alive
-    if (from === 'detached') {
+    if (from === 'detached' && input.alive === true) {
       // Reappeared: resume from last known without fabricating `running`
       const resumeState = prev.previousWorkingStatus && prev.previousWorkingStatus !== 'running'
         ? prev.previousWorkingStatus
         : 'idle';
       to = resumeState;
       reason = 'liveness_restored';
-    } else if (from === 'running') {
+    } else if (working && input.alive === true) {
       const quietMs = Math.max(0, input.now - prev.lastActivityAt);
       if (quietMs > stallThresholdMs) {
         to = 'stalled';

@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { createSocket, type Socket } from 'node:dgram';
 import {
   copyFileSync,
@@ -14,10 +13,11 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { promisify } from 'node:util';
 import type { AdapterHealth, Capabilities } from '@agent-deck/core';
 import { estimateApiCostUsd } from '@agent-deck/pricing';
 import type { Adapter, AdapterContext, EmitEventInput } from '../adapter-spi.js';
+import { promisify } from 'node:util';
+import { parseClaudeSessions, claudeSessionStatus } from './claude-sessions.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +26,13 @@ export const CLAUDE_HOOK_EVENTS = [
   'UserPromptSubmit',
   'PreToolUse',
   'PostToolUse',
+  'PostToolUseFailure',
+  'PermissionRequest',
+  'PreCompact',
+  'PostCompact',
+  'StopFailure',
+  'SubagentStart',
+  'MessageDisplay',
   'Notification',
   'Stop',
   'SubagentStop',
@@ -35,7 +42,7 @@ export const CLAUDE_HOOK_EVENTS = [
 export interface ClaudeHookEntry {
   matcher?: string;
   _source?: string;
-  hooks: Array<{ type: 'command'; command: string }>;
+  hooks: Array<{ type: 'command'; command: string; args?: string[]; timeout?: number; onFailure?: 'continue' }>;
 }
 
 export function buildClaudeSettingsWithHooks(
@@ -43,22 +50,24 @@ export function buildClaudeSettingsWithHooks(
   commandPath = 'agent-deck-hook'
 ): Record<string, unknown> {
   const clone = JSON.parse(JSON.stringify(existingSettings || {})) as Record<string, unknown>;
+  if (clone.hooks !== undefined && (!clone.hooks || typeof clone.hooks !== 'object' || Array.isArray(clone.hooks))) throw new Error('Invalid Claude hooks object');
   const hooksObj = ((clone.hooks as Record<string, unknown>) ?? {}) as Record<string, ClaudeHookEntry[]>;
 
   for (const ev of CLAUDE_HOOK_EVENTS) {
+    if (hooksObj[ev] !== undefined && !Array.isArray(hooksObj[ev])) throw new Error(`Invalid Claude hook list: ${ev}`);
     const currentList = Array.isArray(hooksObj[ev]) ? [...hooksObj[ev]] : [];
     // Remove any existing agent-deck entries so install is idempotent
     const filtered = currentList.filter((item) => item?._source !== 'agent-deck');
     const entry: ClaudeHookEntry =
-      ev === 'PreToolUse' || ev === 'PostToolUse'
+      ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest'].includes(ev)
         ? {
             matcher: '*',
             _source: 'agent-deck',
-            hooks: [{ type: 'command', command: commandPath }]
+            hooks: [{ type: 'command', command: commandPath, args: ['--source', 'claude', '--udp-addr', '127.0.0.1:4101'], timeout: 2, onFailure: 'continue' }]
           }
         : {
             _source: 'agent-deck',
-            hooks: [{ type: 'command', command: commandPath }]
+            hooks: [{ type: 'command', command: commandPath, args: ['--source', 'claude', '--udp-addr', '127.0.0.1:4101'], timeout: 2, onFailure: 'continue' }]
           };
     filtered.push(entry);
     hooksObj[ev] = filtered;
@@ -122,13 +131,15 @@ export function setupClaudeHooks(options?: {
   try {
     parsed = JSON.parse(beforeText) as Record<string, unknown>;
   } catch {
-    parsed = {};
+    throw new Error('Claude settings are invalid JSON; refusing to overwrite them');
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Claude settings must be an object');
 
   const updatedObj = buildClaudeSettingsWithHooks(parsed, commandPath);
   const afterText = JSON.stringify(updatedObj, null, 2) + '\n';
   const diff = generateUnifiedDiff(beforeText, afterText, settingsPath);
 
+  if (beforeText === afterText) return { diff: '', modified: false };
   if (options?.dryRun) {
     return { diff, modified: false };
   }
@@ -167,14 +178,21 @@ export function uninstallClaudeHooks(options?: { settingsPath?: string }): { res
 export function normalizeClaudeHookDatagram(raw: Record<string, unknown>, ts = Date.now()): EmitEventInput[] {
   const events: EmitEventInput[] = [];
   const hookEvent = String(raw.hook_event_name || raw.ev || raw.event || '');
-  const nativeId = String(raw.session_id || raw.sid || '');
-  if (!nativeId) return events;
+  const sessionId = String(raw.session_id || raw.sid || '');
+  if (!sessionId || !CLAUDE_HOOK_EVENTS.includes(hookEvent as typeof CLAUDE_HOOK_EVENTS[number])) return events;
+  if (raw._agent_deck_source && raw._agent_deck_source !== 'claude') return events;
+  const agentId = typeof raw.agent_id === 'string' ? raw.agent_id : '';
+  const nativeId = agentId ? `${sessionId}:agent:${agentId}` : sessionId;
+  const notificationType = String(raw.notification_type || raw.type || '');
+  if (hookEvent === 'Notification' && notificationType && !['permission_prompt', 'idle_prompt', 'elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input'].includes(notificationType)) return events;
 
   const runId = `claude:${nativeId}`;
   const cwd = String(raw.cwd || raw.project_dir || '');
   const projectName = cwd ? basename(cwd.replace(/\\/g, '/')) : nativeId.slice(0, 8);
 
-  if (hookEvent === 'SessionStart') {
+  // Any native hook can be the first observed event after collector startup.
+  // Tool IDs never become sessions, and subagents remain linked to their parent.
+  {
     events.push({
       type: 'run.started',
       runId,
@@ -182,16 +200,32 @@ export function normalizeClaudeHookDatagram(raw: Record<string, unknown>, ts = D
       payload: {
         source: 'claude',
         nativeId,
+        parentId: agentId ? `claude:${sessionId}` : undefined,
         projectPath: cwd,
         projectName,
-        title: projectName,
-        model: String(raw.model || 'claude-sonnet-4'),
+        title: agentId ? String(raw.agent_type || 'Subagent') : projectName,
+        model: String(raw.model || ''),
         confidence: 'live',
+        historical: false,
+        resumed: hookEvent === 'SessionStart',
         startedAt: ts
       }
     });
+  }
+  const emit = (type: EmitEventInput['type'], payload: unknown) => events.push({ type, runId, ts, payload });
+  const clearAttention = () => emit('attention.cleared', { reason: hookEvent });
+  if (hookEvent === 'SessionStart') {
+    clearAttention();
+    emit('state.changed', { from: 'starting', to: 'idle', reason: 'session_started', confidence: 'live' });
+  } else if (hookEvent === 'SubagentStart') {
+    emit('turn.started', { turn: 1 });
+  } else if (hookEvent === 'MessageDisplay') {
+    const preview = String(raw.message_preview ?? raw.delta ?? '');
+    if (preview) emit('message.completed', { messageId: String(raw.message_id || `${nativeId}:${ts}`), role: 'assistant', preview: preview.slice(0, 400) });
   } else if (hookEvent === 'UserPromptSubmit') {
+    clearAttention();
     const prompt = String(raw.prompt || '');
+    if (prompt) emit('message.completed', { messageId: `${nativeId}:prompt:${String(raw.prompt_id || ts)}`, role: 'user', preview: prompt.slice(0, 400) });
     events.push({
       type: 'turn.started',
       runId,
@@ -213,6 +247,7 @@ export function normalizeClaudeHookDatagram(raw: Record<string, unknown>, ts = D
       });
     }
   } else if (hookEvent === 'PreToolUse') {
+    clearAttention();
     const toolName = String(raw.tool_name || raw.tool || 'tool');
     const toolInput = (raw.tool_input ?? raw.input ?? {}) as Record<string, unknown>;
     const detail = String(
@@ -229,7 +264,8 @@ export function normalizeClaudeHookDatagram(raw: Record<string, unknown>, ts = D
         tool: toolName
       }
     });
-  } else if (hookEvent === 'PostToolUse') {
+  } else if (hookEvent === 'PostToolUse' || hookEvent === 'PostToolUseFailure') {
+    clearAttention();
     const toolName = String(raw.tool_name || raw.tool || 'tool');
     const toolInput = (raw.tool_input ?? raw.input ?? {}) as Record<string, unknown>;
     const detail = String(
@@ -243,12 +279,12 @@ export function normalizeClaudeHookDatagram(raw: Record<string, unknown>, ts = D
         stepId: String(raw.tool_use_id || `${nativeId}:${ts}`),
         label: toolName.toLowerCase(),
         detail,
-        ok: !raw.error
+        ok: hookEvent !== 'PostToolUseFailure' && !raw.error
       }
     });
-  } else if (hookEvent === 'Notification') {
-    const msg = String(raw.message || raw.title || 'Waiting for user input or permission');
-    const isIdlePrompt = msg.toLowerCase().includes('idle') || raw.type === 'idle_prompt';
+  } else if (hookEvent === 'Notification' || hookEvent === 'PermissionRequest') {
+    const msg = String(raw.message || raw.title || `Permission requested: ${raw.tool_name || 'tool'}`);
+    const isIdlePrompt = notificationType === 'idle_prompt';
     events.push({
       type: 'attention.raised',
       runId,
@@ -263,25 +299,28 @@ export function normalizeClaudeHookDatagram(raw: Record<string, unknown>, ts = D
         }
       }
     });
-  } else if (hookEvent === 'Stop') {
+  } else if (hookEvent === 'PreCompact' || hookEvent === 'PostCompact') {
+    emit(hookEvent === 'PreCompact' ? 'compact.started' : 'compact.completed', {});
+  } else if (hookEvent === 'Stop' || hookEvent === 'StopFailure' || hookEvent === 'SubagentStop') {
+    clearAttention();
+    if (typeof raw.last_assistant_message === 'string' && raw.last_assistant_message.trim()) {
+      emit('message.completed', { messageId: `${nativeId}:stop:${String(raw.prompt_id || ts)}`, role: 'assistant', preview: raw.last_assistant_message.slice(0, 400) });
+    }
     events.push({
       type: 'turn.completed',
       runId,
       ts,
       payload: { turn: 1 }
     });
-  } else if (hookEvent === 'SubagentStop') {
-    events.push({
-      type: 'tool.completed',
-      runId,
-      ts,
-      payload: {
-        label: 'subagent',
-        detail: 'subagent completed',
-        ok: true
-      }
-    });
+    if (hookEvent === 'StopFailure') {
+      emit('error.raised', { message: String(raw.error_details || raw.error || 'Claude turn failed'), recoverable: false });
+    } else if (hookEvent === 'SubagentStop' && agentId) {
+      emit('run.ended', { outcome: 'done', endedAt: ts });
+    } else {
+      emit('state.changed', { from: 'done', to: 'idle', reason: 'native_stop', confidence: 'live' });
+    }
   } else if (hookEvent === 'SessionEnd') {
+    clearAttention();
     events.push({
       type: 'run.ended',
       runId,
@@ -470,6 +509,9 @@ export interface ClaudeAdapterOptions {
   projectsDir?: string;
   udpPort?: number;
   pollIntervalMs?: number;
+  nativePollIntervalMs?: number;
+  cliPath?: string;
+  listSessions?: () => Promise<unknown>;
 }
 
 export class ClaudeAdapter implements Adapter {
@@ -482,11 +524,26 @@ export class ClaudeAdapter implements Adapter {
   private pollTimer: NodeJS.Timeout | null = null;
   private offsets: Record<string, number> = {};
   private currentHealth: AdapterHealth;
+  private readonly nativeSessions = new Map<string, { ended: boolean; receivedAt: number }>();
+  private readonly messageBatches = new Map<string, { text: string; index: number }>();
+  private readonly hookEventIds = new Set<string>();
+  private readonly nativePollIntervalMs: number;
+  private readonly listSessions: () => Promise<unknown>;
+  private nativeTimer: NodeJS.Timeout | null = null;
+  private pollingNative = false;
+  private nativeGeneration = 0;
+  private readonly inventory = new Map<string, { busy: boolean; missing: boolean; checkedAt: number; fingerprint: string }>();
 
   constructor(options: ClaudeAdapterOptions = {}) {
     this.projectsDir = options.projectsDir ?? join(homedir(), '.claude', 'projects');
     this.udpPort = options.udpPort ?? 4101;
     this.pollIntervalMs = options.pollIntervalMs ?? 2500;
+    this.nativePollIntervalMs = options.nativePollIntervalMs ?? 10_000;
+    this.listSessions = options.listSessions ?? (async () => {
+      const executable = options.cliPath ?? process.env.AGENT_DECK_CLAUDE_COMMAND ?? (process.platform === 'win32' ? 'claude.exe' : 'claude');
+      const { stdout } = await execFileAsync(executable, ['agents', '--json', '--all'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
+      return JSON.parse(stdout);
+    });
     this.currentHealth = {
       source: 'claude',
       status: 'off',
@@ -507,7 +564,7 @@ export class ClaudeAdapter implements Adapter {
       try {
         const text = readFileSync(settingsPath, 'utf8');
         const settings = JSON.parse(text) as { hooks?: Record<string, ClaudeHookEntry[]> };
-        hooksInstalled = CLAUDE_HOOK_EVENTS.every(event => settings.hooks?.[event]?.some(entry =>
+        hooksInstalled = !(settings as Record<string, unknown>).disableAllHooks && CLAUDE_HOOK_EVENTS.every(event => settings.hooks?.[event]?.some(entry =>
           entry._source === 'agent-deck' && entry.hooks?.some(hook => hook.type === 'command' && !!hook.command)));
       } catch {
         hooksInstalled = false;
@@ -538,6 +595,7 @@ export class ClaudeAdapter implements Adapter {
   }
 
   public async start(ctx: AdapterContext): Promise<void> {
+    this.nativeGeneration += 1;
     this.ctx = ctx;
     this.offsets = ctx.getSetting<Record<string, number>>('claude_offsets') ?? {};
     await this.probe();
@@ -552,10 +610,7 @@ export class ClaudeAdapter implements Adapter {
             try {
               const str = msg.toString('utf8');
               const parsed = JSON.parse(str) as Record<string, unknown>;
-              const normalized = normalizeClaudeHookDatagram(parsed, Date.now());
-              for (const ev of normalized) {
-                this.ctx?.emit(ev);
-              }
+              if (!this.ingestHook(parsed)) return;
               this.currentHealth.lastSeenAt = Date.now();
               this.currentHealth.lastEventAt = this.currentHealth.lastSeenAt;
               this.ctx?.reportHealth(this.currentHealth);
@@ -586,14 +641,19 @@ export class ClaudeAdapter implements Adapter {
     }
 
     this.scanTranscripts();
+    await this.reconcileNativeSessions();
+    this.nativeTimer = setInterval(() => { void this.reconcileNativeSessions(); }, this.nativePollIntervalMs);
+    this.nativeTimer.unref();
     this.pollTimer = setInterval(() => {
       this.scanTranscripts();
-      this.scanBackgroundProcesses();
     }, this.pollIntervalMs);
     this.pollTimer.unref();
   }
 
   public async stop(): Promise<void> {
+    this.nativeGeneration += 1;
+    if (this.nativeTimer) clearInterval(this.nativeTimer);
+    this.nativeTimer = null;
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -612,6 +672,102 @@ export class ClaudeAdapter implements Adapter {
 
   public health(): AdapterHealth {
     return this.currentHealth;
+  }
+
+  public sessionAlive(nativeId: string): boolean | undefined {
+    const observed = this.inventory.get(nativeId);
+    if (observed && Date.now() - observed.checkedAt <= this.nativePollIntervalMs * 2) {
+      if (observed.missing) return false;
+      if (observed.busy) return true;
+    }
+    // Hooks are events, not heartbeats. Never claim indefinite liveness from
+    // SessionStart; an explicit SessionEnd does prove that the session closed.
+    return this.nativeSessions.get(nativeId)?.ended ? false : undefined;
+  }
+
+  public ingestHook(raw: Record<string, unknown>, ts = Date.now()): boolean {
+    if (raw._agent_deck_source && raw._agent_deck_source !== 'claude') return false;
+    const eventId = typeof raw.event_id === 'string' ? raw.event_id : undefined;
+    if (eventId && this.hookEventIds.has(eventId)) return false;
+    const nativeIdForOrder = `${raw.session_id || raw.sid || ''}${raw.agent_id ? `:agent:${raw.agent_id}` : ''}`;
+    if (typeof raw.emitted_at_ms === 'number') {
+      if (raw.emitted_at_ms > ts + 30_000 || ts - raw.emitted_at_ms > 120_000 || raw.emitted_at_ms < (this.nativeSessions.get(nativeIdForOrder)?.receivedAt ?? 0)) return false;
+      ts = raw.emitted_at_ms;
+    }
+    if (raw.hook_event_name === 'MessageDisplay') {
+      if (!raw.session_id || !raw.message_id || !Number.isInteger(raw.index) || Number(raw.index) < 0 || typeof raw.delta !== 'string') return false;
+      const key = `${raw.session_id}:${raw.agent_id || ''}:${raw.message_id}`;
+      const previous = this.messageBatches.get(key);
+      if (previous && Number(raw.index) <= previous.index) return false;
+      const text = ((previous?.text ?? '') + raw.delta).slice(0, 400);
+      this.messageBatches.set(key, { text, index: Number(raw.index) });
+      if (this.messageBatches.size > 100) this.messageBatches.delete(this.messageBatches.keys().next().value!);
+      raw = { ...raw, message_preview: text };
+    }
+    const events = normalizeClaudeHookDatagram(raw, ts);
+    if (!events.length) return false;
+    if (eventId) {
+      this.hookEventIds.add(eventId);
+      if (this.hookEventIds.size > 1000) this.hookEventIds.delete(this.hookEventIds.values().next().value!);
+    }
+    const nativeId = events[0].runId!.slice('claude:'.length);
+    this.nativeSessions.set(nativeId, {
+      ended: raw.hook_event_name === 'SessionEnd' || raw.hook_event_name === 'SubagentStop',
+      receivedAt: ts
+    });
+    for (const event of events) this.ctx?.emit(event);
+    return true;
+  }
+
+  public async reconcileNativeSessions(now = Date.now()): Promise<void> {
+    if (!this.ctx || this.pollingNative) return;
+    this.pollingNative = true;
+    const generation = this.nativeGeneration;
+    try {
+      const rows = parseClaudeSessions(await this.listSessions());
+      if (generation !== this.nativeGeneration) return;
+      const seen = new Set<string>();
+      for (const row of rows) {
+        seen.add(row.sessionId);
+        if ((this.nativeSessions.get(row.sessionId)?.receivedAt ?? 0) > now) continue;
+        const status = claudeSessionStatus(row);
+        const previous = this.inventory.get(row.sessionId);
+        const fingerprint = JSON.stringify(row);
+        const changed = previous?.fingerprint !== fingerprint || (this.nativeSessions.get(row.sessionId)?.receivedAt ?? 0) > (previous?.checkedAt ?? 0);
+        this.inventory.set(row.sessionId, { busy: status === 'running', missing: false, checkedAt: now, fingerprint });
+        const runId = `claude:${row.sessionId}`;
+        if (changed) {
+          const projectName = basename(row.cwd.replace(/\\/g, '/'));
+          this.ctx.emit({ type: 'run.started', runId, ts: row.startedAt, payload: { source: 'claude', nativeId: row.sessionId,
+            projectPath: row.cwd, projectName, title: row.name || projectName, model: '', agentMode: row.kind,
+            confidence: 'polled', historical: false, resumed: !!row.pid && (!previous || previous.missing), startedAt: row.startedAt } });
+          if (status === 'waiting') this.ctx.emit({ type: 'attention.raised', runId, ts: now, payload: { attention: {
+            id: `${row.sessionId}:native-wait`, kind: row.waitingFor === 'permission prompt' ? 'permission' : 'question',
+            summary: row.waitingFor || 'Claude reports that this session needs input', requestedAt: now
+          } } });
+          else this.ctx.emit({ type: 'attention.cleared', runId, ts: now, payload: { reason: 'native_session_inventory' } });
+        }
+        this.ctx.emit({ type: 'state.changed', runId, ts: now, payload: { from: 'idle', to: status,
+          reason: status === 'detached' ? 'activity_unconfirmed' : 'native_session_inventory', confidence: 'polled' } });
+      }
+      for (const [id, previous] of this.inventory) {
+        if (seen.has(id) || previous.missing || (this.nativeSessions.get(id)?.receivedAt ?? 0) > now) continue;
+        this.inventory.set(id, { ...previous, busy: false, missing: true, checkedAt: now });
+        this.ctx.emit({ type: 'state.changed', runId: `claude:${id}`, ts: now,
+          payload: { from: 'idle', to: 'detached', reason: 'liveness_lost', confidence: 'polled' } });
+      }
+      this.currentHealth.lastPolledAt = now;
+      this.currentHealth.status = 'connected';
+      this.currentHealth.lastError = undefined;
+      this.currentHealth.capabilities.notes = [...this.currentHealth.capabilities.notes.filter(note => !note.startsWith('native-inventory=')), 'native-inventory=claude agents --json --all'];
+      this.ctx.reportHealth(this.currentHealth);
+    } catch {
+      if (generation !== this.nativeGeneration) return;
+      // A failed read is unknown, not proof that every session exited.
+      this.inventory.clear();
+      this.currentHealth.capabilities.notes = [...this.currentHealth.capabilities.notes.filter(note => !note.startsWith('native-inventory=')), 'native-inventory=unavailable (hooks/transcript fallback)'];
+      this.ctx.reportHealth(this.currentHealth);
+    } finally { this.pollingNative = false; }
   }
 
   public scanTranscripts(maxFiles = 20): number {
@@ -713,6 +869,9 @@ export class ClaudeAdapter implements Adapter {
           mtimeMs
         );
         for (const ev of events) {
+          // Transcript writes can lag a native Stop. After hooks take ownership,
+          // retain enrichment without replaying lifecycle or old messages.
+          if ((this.nativeSessions.has(sessionId) || this.inventory.has(sessionId)) && !['usage.tick', 'file.changed', 'run.updated'].includes(ev.type)) continue;
           this.ctx.emit(ev);
           this.currentHealth.lastEventAt = Math.max(this.currentHealth.lastEventAt ?? 0, ev.ts ?? mtimeMs);
         }
@@ -726,44 +885,5 @@ export class ClaudeAdapter implements Adapter {
     return count;
   }
 
-  public async scanBackgroundProcesses(): Promise<void> {
-    if (process.platform !== 'win32' || !this.ctx) return;
-    try {
-      const { stdout } = await execFileAsync(
-        'pwsh',
-        [
-          '-NoProfile',
-          '-Command',
-          "Get-CimInstance Win32_Process -Filter \"Name LIKE '%claude%'\" | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress"
-        ],
-        { timeout: 3000 }
-      );
-      if (!stdout || !stdout.trim()) return;
-      const parsed = JSON.parse(stdout);
-      const list = Array.isArray(parsed) ? parsed : [parsed];
-      for (const proc of list) {
-        const cmdLine = String(proc?.CommandLine || '');
-        if (cmdLine.includes('--bg') || cmdLine.includes('--background')) {
-          const pid = String(proc?.ProcessId || 'bg');
-          const runId = `claude:bg_${pid}`;
-          this.ctx.emit({
-            type: 'run.started',
-            runId,
-            payload: {
-              source: 'claude',
-              nativeId: `bg_${pid}`,
-              projectPath: '',
-              projectName: 'claude-bg',
-              title: `Claude background session (PID ${pid})`,
-              model: 'claude-sonnet-4',
-              agentMode: 'background',
-              confidence: 'polled'
-            }
-          });
-        }
-      }
-    } catch {
-      // ignore process scan failure
-    }
-  }
 }
+import { execFile } from 'node:child_process';

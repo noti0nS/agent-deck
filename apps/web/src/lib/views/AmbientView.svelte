@@ -2,7 +2,7 @@
   import { deckStore } from '$lib/stores/deck.svelte';
   import { formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '$lib/format';
 
-  const runs = $derived(deckStore.sortedRuns.slice(0, 6));
+  const runs = $derived(deckStore.dashboardSessions.slice(0, 6));
   const agg = $derived(deckStore.visibleAggregates);
 </script>
 

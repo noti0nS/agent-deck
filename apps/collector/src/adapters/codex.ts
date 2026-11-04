@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import type { AdapterHealth, Capabilities } from '@agent-deck/core';
 import { estimateApiCostUsd } from '@agent-deck/pricing';
 import type { Adapter, AdapterContext, EmitEventInput } from '../adapter-spi.js';
+import { CodexAppServerObserver, discoverCodexAppServer, type CodexAppServerOptions } from './codex-app-server.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -31,6 +32,10 @@ export function toolOutcome(output: unknown): boolean | undefined {
 export interface CodexAdapterOptions {
   sessionsDir?: string;
   pollIntervalMs?: number;
+  /** Auto-discovers only an already-running managed daemon. false disables it. */
+  appServer?: CodexAppServerOptions | false;
+  /** Discovery injection for embedded collectors and deterministic transport tests. */
+  discoverAppServer?: typeof discoverCodexAppServer;
 }
 
 export function normalizeCodexRolloutLine(
@@ -45,8 +50,9 @@ export function normalizeCodexRolloutLine(
   const payload = (lineObj.payload ?? {}) as Record<string, unknown>;
   const ts = lineObj.timestamp ? new Date(String(lineObj.timestamp)).getTime() || defaultTs : defaultTs;
   let model = currentModel;
-  let nativeId = String(payload.thread_id || payload.session_id || fallbackId);
-  if (!nativeId) nativeId = fallbackId;
+  // A rollout belongs to its session_meta thread. Nested tool/subagent records
+  // can reference other threads and must never retarget subsequent events.
+  let nativeId = fallbackId;
   const runId = `codex:${nativeId}`;
 
   if (type === 'session_meta') {
@@ -76,14 +82,28 @@ export function normalizeCodexRolloutLine(
     });
   } else if (type === 'compacted' || (type === 'response_item' && payload.type === 'compaction')) {
     events.push({
-      type: 'compact.started',
+      type: 'compact.completed',
       runId,
       ts,
       payload: {}
     });
   } else if (type === 'event_msg') {
     const evType = String(payload.type || '');
-    if (evType === 'thread_settings_applied') {
+    if (evType === 'item_completed') {
+      const item = (payload.item ?? {}) as Record<string, unknown>;
+      if (item.type === 'AgentMessage') {
+        const content = Array.isArray(item.content) ? item.content as Array<Record<string, unknown>> : [];
+        const preview = content.map(c => typeof c.text === 'string' ? c.text : '').filter(Boolean).join('\n');
+        if (preview.trim()) events.push({
+          type: 'message.completed', runId, ts,
+          payload: { messageId: String(item.id || `${nativeId}:${lineIndex}`), role: 'assistant', preview: preview.slice(0, 400) }
+        });
+      } else if (item.type === 'ContextCompaction') {
+        events.push({ type: 'compact.completed', runId, ts, payload: {} });
+      }
+    } else if (evType === 'context_compacted') {
+      events.push({ type: 'compact.completed', runId, ts, payload: {} });
+    } else if (evType === 'thread_settings_applied') {
       const settings = (payload.thread_settings ?? {}) as Record<string, unknown>;
       if (typeof settings.model === 'string' && settings.model) {
         model = settings.model;
@@ -114,7 +134,8 @@ export function normalizeCodexRolloutLine(
         ts,
         payload: { turn: lineIndex + 1 }
       });
-    } else if (evType === 'task_complete') {
+    } else if (evType === 'task_complete' || evType === 'turn_aborted') {
+      events.push({ type: 'attention.cleared', runId, ts, payload: { reason: evType } });
       events.push({
         type: 'turn.completed',
         runId,
@@ -126,7 +147,7 @@ export function normalizeCodexRolloutLine(
         type: 'state.changed',
         runId,
         ts,
-        payload: { from: 'done', to: 'idle', reason: 'task_complete' }
+        payload: { from: 'done', to: 'idle', reason: evType }
       });
     } else if (evType === 'exec_approval_request' || evType === 'apply_patch_approval_request') {
       const cmd = String(payload.command || payload.reason || 'Approval requested');
@@ -175,8 +196,8 @@ export function normalizeCodexRolloutLine(
       const content = Array.isArray(payload.content)
         ? (payload.content as Array<Record<string, unknown>>)
         : [];
-      for (const c of content) {
-        if (typeof c.text === 'string' && c.text.trim()) {
+      const preview = content.map(c => typeof c.text === 'string' ? c.text : '').filter(Boolean).join('\n');
+        if (preview.trim()) {
           events.push({
             type: 'message.completed',
             runId,
@@ -184,12 +205,14 @@ export function normalizeCodexRolloutLine(
             payload: {
               messageId: String(payload.id || `${nativeId}:${lineIndex}`),
               role: 'assistant',
-              preview: c.text.slice(0, 400)
+              preview: preview.slice(0, 400)
             }
           });
         }
-      }
     }
+  } else if (type === 'turn_context' && typeof payload.model === 'string') {
+    model = payload.model;
+    events.push({ type: 'run.updated', runId, ts, payload: { model } });
   } else if (type === 'token_usage_record') {
     const usage = (payload.usage ?? payload.turn_token_usage ?? {}) as Record<string, unknown>;
     const tokensIn = Number(usage.input_tokens || 0);
@@ -237,11 +260,20 @@ export class CodexAdapter implements Adapter {
   private ctx?: AdapterContext;
   private pollTimer: NodeJS.Timeout | null = null;
   private offsets: Record<string, { offset: number; model: string; nativeId: string; identity?: string; line?: number }> = {};
+  private validatedIdentities = new Map<string, string>();
   private currentHealth: AdapterHealth;
+  private runtime?: CodexAppServerObserver;
+  private readonly appServerOptions: CodexAppServerOptions | false;
+  private readonly discoverAppServer: typeof discoverCodexAppServer;
+  private nextDiscoveryAt = 0;
+  private runtimeWork?: Promise<void>;
+  private generation = 0;
 
   constructor(options: CodexAdapterOptions = {}) {
     this.sessionsDir = options.sessionsDir ?? join(homedir(), '.codex', 'sessions');
     this.pollIntervalMs = options.pollIntervalMs ?? 3000;
+    this.appServerOptions = options.appServer ?? (options.sessionsDir ? false : {});
+    this.discoverAppServer = options.discoverAppServer ?? discoverCodexAppServer;
     this.currentHealth = {
       source: 'codex',
       status: 'off',
@@ -293,19 +325,29 @@ export class CodexAdapter implements Adapter {
   }
 
   public async start(ctx: AdapterContext): Promise<void> {
+    const generation = ++this.generation;
     this.ctx = ctx;
     this.offsets = ctx.getSetting<typeof this.offsets>('codex_offsets') ?? {};
     await this.probe();
+    if (generation !== this.generation || this.ctx !== ctx) return;
     ctx.reportHealth(this.currentHealth);
 
     this.scanRolloutFiles(15);
+    this.nextDiscoveryAt = 0;
+    await this.refreshRuntime();
+    if (generation !== this.generation || this.ctx !== ctx) return;
     this.pollTimer = setInterval(() => {
       this.scanRolloutFiles(10);
+      void this.refreshRuntime();
     }, this.pollIntervalMs);
     this.pollTimer.unref();
   }
 
   public async stop(): Promise<void> {
+    this.generation++;
+    this.runtime?.stop();
+    this.runtime = undefined;
+    this.ctx = undefined;
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -314,6 +356,54 @@ export class CodexAdapter implements Adapter {
 
   public health(): AdapterHealth {
     return this.currentHealth;
+  }
+
+  public sessionAlive(nativeId: string): boolean | undefined {
+    return this.runtime?.sessionAlive(nativeId);
+  }
+
+  private runtimeHealth(available: boolean, failed = false): void {
+    if (!this.ctx) return;
+    this.currentHealth.capabilities.liveEvents = available;
+    this.currentHealth.transport = available ? 'socket' : 'poll';
+    this.currentHealth.status = available ? 'connected' : failed ? 'degraded' : existsSync(this.sessionsDir) ? 'connected' : 'off';
+    this.currentHealth.lastError = failed ? 'Codex runtime read unavailable; using rollout evidence' : undefined;
+    this.currentHealth.capabilities.notes = this.currentHealth.capabilities.notes.filter(note => !note.startsWith('existing app-server:'));
+    if (available) this.currentHealth.capabilities.notes.push('existing app-server: read-only runtime status');
+    this.ctx.reportHealth(this.currentHealth);
+  }
+
+  private refreshRuntime(now = Date.now()): Promise<void> {
+    if (this.runtimeWork) return this.runtimeWork;
+    if (!this.ctx || this.appServerOptions === false || (!this.runtime && now < this.nextDiscoveryAt)) return Promise.resolve();
+    const ctx = this.ctx;
+    const generation = this.generation;
+    const current = () => generation === this.generation && this.ctx === ctx;
+    const options = this.appServerOptions;
+    this.runtimeWork = (async () => {
+      try {
+        if (!this.runtime) {
+          this.nextDiscoveryAt = now + 30_000;
+          const endpoint = await this.discoverAppServer(options);
+          if (!current()) return;
+          if (!endpoint) { this.runtimeHealth(false); return; }
+          this.runtime = new CodexAppServerObserver(endpoint, event => {
+            if (current()) ctx.emit(event);
+          }, () => { if (current()) this.runtimeHealth(false, true); });
+        }
+        const runtime = this.runtime;
+        await runtime.poll();
+        if (!current()) { runtime.stop(); return; }
+        if (runtime.lastPolledAt) this.runtimeHealth(true);
+      } catch {
+        if (!current()) return;
+        this.runtime?.stop();
+        this.runtime = undefined;
+        this.nextDiscoveryAt = now + 30_000;
+        this.runtimeHealth(false, true);
+      }
+    })().finally(() => { this.runtimeWork = undefined; });
+    return this.runtimeWork;
   }
 
   public scanRolloutFiles(maxFiles = 15): number {
@@ -370,6 +460,33 @@ export class CodexAdapter implements Adapter {
       identity,
       line: 0
     };
+    if (state.offset === 0 || this.validatedIdentities.get(filePath) !== identity) {
+      // Old persisted offsets may contain an item ID. Recover the authoritative
+      // thread ID without replaying usage or tool calls already ingested.
+      const header = Buffer.alloc(Math.min(st.size, 1024 * 1024));
+      const headerFd = openSync(filePath, 'r');
+      try {
+        const bytes = readSync(headerFd, header, 0, header.length, 0);
+        const newline = header.indexOf(10, 0);
+        if (newline < 0 || newline >= bytes) return 0;
+        const meta = JSON.parse(header.subarray(0, newline).toString('utf8')) as Record<string, unknown>;
+        if (meta.type !== 'session_meta') return 0;
+        const parsed = normalizeCodexRolloutLine(baseName, meta, 0, state.model, mtimeMs);
+        state.nativeId = parsed.nativeId;
+        if (state.offset > 0) {
+          for (const event of parsed.events) {
+            this.ctx.emit({ ...event, type: 'run.updated' });
+          }
+          this.ctx.setSetting('codex_offsets', this.offsets);
+        }
+        this.validatedIdentities.set(filePath, identity);
+      } catch {
+        this.currentHealth.parseErrors = (this.currentHealth.parseErrors ?? 0) + 1;
+        return 0;
+      } finally {
+        closeSync(headerFd);
+      }
+    }
     const startOffset = st.size < state.offset ? 0 : state.offset;
     if (st.size <= startOffset) return 0;
 
@@ -407,6 +524,7 @@ export class CodexAdapter implements Adapter {
         state.nativeId = res.nativeId;
         for (const ev of res.events) {
           this.ctx.emit(ev);
+          if (ev.runId) this.runtime?.restoreStatus(ev.runId.slice('codex:'.length));
           this.currentHealth.lastEventAt = Math.max(this.currentHealth.lastEventAt ?? 0, ev.ts ?? mtimeMs);
           this.currentHealth.lastSeenAt = this.currentHealth.lastEventAt;
         }

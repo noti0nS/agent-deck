@@ -673,7 +673,7 @@ export class CollectorStore {
     let burnRateTokensPerMin = 0;
     let burnRateUsdPerMin = 0;
     for (const run of activeRuns) {
-      if (run.status === 'running' || run.status === 'compacting') {
+      if (!run.historical && (run.status === 'running' || run.status === 'compacting')) {
         const mins = Math.max(1, (run.lastActivityAt - run.startedAt) / 60_000);
         burnRateTokensPerMin += (run.usage.tokensIn + run.usage.tokensOut) / mins;
         if (run.usage.costUsd) {

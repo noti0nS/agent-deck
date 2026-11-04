@@ -1,15 +1,11 @@
 import type Database from 'better-sqlite3';
-import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { promisify } from 'node:util';
 import type { AdapterHealth, Capabilities, Confidence, Todo } from '@agent-deck/core';
 import { estimateApiCostUsd } from '@agent-deck/pricing';
 import type { Adapter, AdapterContext, EmitEventInput } from '../adapter-spi.js';
 import { withReadonlySqlite } from './readonly-sqlite.js';
-
-const execFileAsync = promisify(execFile);
 
 export interface OpenCodeSessionRow {
   id: string;
@@ -96,14 +92,20 @@ export function normalizeOpenCodeSseEvent(raw: Record<string, unknown>, ts = Dat
       }
     });
 
-    if (timeObj.compacting) {
-      events.push({
-        type: 'compact.started',
-        runId,
-        ts,
-        payload: {}
-      });
+    // Session metadata (including persisted compaction timestamps) is not liveness.
+  } else if (type === 'session.status') {
+    const nativeId = String(props.sessionID || '');
+    const status = (props.status as { type?: string } | undefined)?.type;
+    if (!nativeId || !['busy', 'retry', 'idle'].includes(status ?? '')) return events;
+    if (status === 'idle') {
+      events.push({ type: 'attention.cleared', runId: `opencode:${nativeId}`, ts, payload: { reason: 'session.status:idle' } });
     }
+    events.push({
+      type: 'state.changed',
+      runId: `opencode:${nativeId}`,
+      ts,
+      payload: { from: 'idle', to: status === 'idle' ? 'idle' : 'running', reason: `session.status:${status}`, confidence: 'live' }
+    });
   } else if (type === 'message.part.updated') {
     const part = (props.part ?? {}) as Record<string, unknown>;
     const nativeId = String(part.sessionID || '');
@@ -270,6 +272,10 @@ export class OpenCodeAdapter implements Adapter {
   private sseAbort: AbortController | null = null;
   private stopped = false;
   private currentHealth: AdapterHealth;
+  private readonly sessionSnapshots = new Map<string, string>();
+  private readonly sessionStatuses = new Map<string, { active: boolean; checkedAt: number }>();
+  private readonly apiSessions = new Set<string>();
+  private readonly apiMessagePreviews = new Map<string, string>();
 
   constructor(options: OpenCodeAdapterOptions = {}) {
     this.dbPath = options.dbPath ?? join(homedir(), '.local', 'share', 'opencode', 'opencode.db');
@@ -289,18 +295,86 @@ export class OpenCodeAdapter implements Adapter {
   }
 
   public async discoverServiceUrl(): Promise<string | undefined> {
-    if (this.serviceUrlOverride) return this.serviceUrlOverride;
+    const candidate = this.serviceUrlOverride ?? process.env.OPENCODE_SERVER_URL ?? 'http://127.0.0.1:4096';
     try {
-      const { stdout } = await execFileAsync('opencode', ['service', 'status'], { timeout: 3000 });
-      const match = stdout.match(/https?:\/\/[^\s]+/);
-      if (match) {
-        this.serviceUrl = match[0].trim();
+      const response = await fetch(`${candidate.replace(/\/$/, '')}/global/health`, { signal: AbortSignal.timeout(2000) });
+      const health = response.ok ? await response.json() as { healthy?: boolean } : undefined;
+      if (health?.healthy === true) {
+        this.serviceUrl = candidate.replace(/\/$/, '');
         return this.serviceUrl;
       }
     } catch {
-      // service status not running or CLI not on PATH
+      // No reachable existing server. Never start a separate server to infer activity.
     }
+    this.serviceUrl = undefined;
+    this.sessionStatuses.clear();
     return undefined;
+  }
+
+  public sessionAlive(nativeId: string): boolean | undefined {
+    const status = this.sessionStatuses.get(nativeId);
+    return status && Date.now() - status.checkedAt <= Math.max(10_000, this.reconcileIntervalMs * 2)
+      ? (status.active ? true : undefined)
+      : undefined;
+  }
+
+  public async reconcileSessionStatuses(): Promise<void> {
+    if (!this.serviceUrl || !this.ctx) return;
+    try {
+      const response = await fetch(`${this.serviceUrl}/session/status`, { signal: AbortSignal.timeout(2000) });
+      if (!response.ok) throw new Error(`Session status HTTP ${response.status}`);
+      const statuses = await response.json() as Record<string, { type?: string }>;
+      const now = Date.now();
+      const ids = new Set([...this.sessionStatuses.keys(), ...Object.keys(statuses)]);
+      for (const id of ids) {
+        const type = statuses[id]?.type ?? 'idle';
+        if (!['busy', 'retry', 'idle'].includes(type)) continue;
+        if (!this.apiSessions.has(id)) {
+          // Hydrate the real session identity before status/tool events can create a skeleton.
+          const detail = await fetch(`${this.serviceUrl}/session/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(2000) });
+          if (detail.ok) {
+            const info = await detail.json() as Record<string, unknown>;
+            if (info.id === id) {
+              for (const event of normalizeOpenCodeSseEvent({ type: 'session.updated', properties: { info } }, now)) this.ctx.emit(event);
+              this.apiSessions.add(id);
+            }
+          }
+        }
+        if (!this.apiSessions.has(id)) continue;
+        await this.refreshLatestMessage(id, now);
+        const previous = this.sessionStatuses.get(id);
+        this.sessionStatuses.set(id, { active: type !== 'idle', checkedAt: now });
+        // Reconcile absent keys too: upstream removes idle entries from this map.
+        for (const event of normalizeOpenCodeSseEvent({ type: 'session.status', properties: { sessionID: id, status: { type } } }, now)) {
+          // A newly fetched message can temporarily mark the reducer running;
+          // reassert idle without manufacturing fresh activity on every poll.
+          if (event.type === 'attention.cleared' && previous?.active === false) continue;
+          this.ctx.emit(event);
+        }
+      }
+    } catch {
+      this.sessionStatuses.clear();
+    }
+  }
+
+  private async refreshLatestMessage(id: string, now: number): Promise<void> {
+    try {
+      const response = await fetch(`${this.serviceUrl}/session/${encodeURIComponent(id)}/message?limit=1`, { signal: AbortSignal.timeout(2000) });
+      if (!response.ok) return;
+      const messages = await response.json() as Array<{ info?: { id?: string; role?: string; time?: { created?: number } }; parts?: Array<{ type?: string; text?: string }> }>;
+      if (!Array.isArray(messages)) return;
+      const message = messages.at(-1);
+      if (!message?.info || !['assistant', 'user'].includes(message.info.role ?? '')) return;
+      const preview = (message.parts ?? []).filter(part => part.type === 'text').map(part => part.text ?? '').join('\n').slice(0, 400);
+      if (!preview) return;
+      const fingerprint = JSON.stringify([message.info.id, preview]);
+      if (this.apiMessagePreviews.get(id) === fingerprint) return;
+      this.apiMessagePreviews.set(id, fingerprint);
+      this.ctx?.emit({ type: 'message.completed', runId: `opencode:${id}`, ts: message.info.time?.created ?? now,
+        payload: { messageId: message.info.id, role: message.info.role, preview } });
+    } catch {
+      // Missing message enrichment does not invalidate a successful status read.
+    }
   }
 
   public async probe(): Promise<Capabilities> {
@@ -336,6 +410,7 @@ export class OpenCodeAdapter implements Adapter {
 
     // Initial DB reconciliation
     this.reconcileFromDb(25, 'polled');
+    await this.reconcileSessionStatuses();
 
     // Start SSE stream loop if service URL is available
     this.startSseLoop();
@@ -343,7 +418,8 @@ export class OpenCodeAdapter implements Adapter {
     this.reconcileTimer = setInterval(async () => {
       if (this.stopped) return;
       await this.discoverServiceUrl();
-      this.reconcileFromDb(15, this.serviceUrl ? 'live' : 'polled');
+      this.reconcileFromDb(15, 'polled');
+      await this.reconcileSessionStatuses();
     }, this.reconcileIntervalMs);
     this.reconcileTimer.unref();
   }
@@ -382,7 +458,10 @@ export class OpenCodeAdapter implements Adapter {
           .all(limit) as OpenCodeSessionRow[];
 
         for (const r of rows.reverse()) {
+          const fingerprint = JSON.stringify(r);
+          if (this.sessionSnapshots.get(r.id) === fingerprint) continue;
           this.emitSessionRow(db, r, confidence, historical);
+          this.sessionSnapshots.set(r.id, fingerprint);
         }
 
         this.currentHealth.lastSeenAt = Date.now();
@@ -404,6 +483,9 @@ export class OpenCodeAdapter implements Adapter {
     historical = false
   ): void {
     if (!this.ctx) return;
+    // Once a live API has identified this session, DB snapshots must not replay
+    // tools/messages or overwrite its authoritative status.
+    if (this.apiSessions.has(r.id) && !historical) return;
     const runId = `opencode:${r.id}`;
     const projectPath = r.directory ?? '';
     const projectName = extractProjectName(projectPath);
@@ -533,26 +615,12 @@ export class OpenCodeAdapter implements Adapter {
       }
     }
 
-    if (r.time_compacting) {
-      this.ctx.emit({
-        type: 'compact.started',
-        runId,
-        ts: updatedAt,
-        payload: {}
-      });
-    } else if (Date.now() - updatedAt < 60_000) {
+    if (!this.sessionStatuses.get(r.id)?.active) {
       this.ctx.emit({
         type: 'state.changed',
         runId,
         ts: updatedAt,
-        payload: { from: 'starting', to: 'running', reason: 'recent_db_update', confidence }
-      });
-    } else {
-      this.ctx.emit({
-        type: 'state.changed',
-        runId,
-        ts: updatedAt,
-        payload: { from: 'starting', to: 'idle', reason: 'session_idle', confidence }
+        payload: { from: 'starting', to: 'idle', reason: 'persisted_session_snapshot', confidence }
       });
     }
   }
@@ -579,6 +647,7 @@ export class OpenCodeAdapter implements Adapter {
         this.currentHealth.lastSeenAt = Date.now();
         this.ctx?.reportHealth(this.currentHealth);
         this.reconcileFromDb(15, 'polled');
+        await this.reconcileSessionStatuses();
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8', { fatal: false });
@@ -597,6 +666,23 @@ export class OpenCodeAdapter implements Adapter {
               try {
                 const raw = JSON.parse(jsonStr) as Record<string, unknown>;
                 backoffMs = 1000;
+                const props = raw.properties as { sessionID?: string; status?: { type?: string }; info?: { id?: string }; part?: { sessionID?: string } } | undefined;
+                const sessionId = props?.sessionID ?? props?.part?.sessionID;
+                if (sessionId && !this.apiSessions.has(sessionId)) {
+                  const detail = await fetch(`${url}/session/${encodeURIComponent(sessionId)}`, { signal: AbortSignal.timeout(2000) });
+                  if (!detail.ok) continue;
+                  const info = await detail.json() as Record<string, unknown>;
+                  if (info.id !== sessionId) continue;
+                  for (const event of normalizeOpenCodeSseEvent({ type: 'session.updated', properties: { info } })) this.ctx?.emit(event);
+                  this.apiSessions.add(sessionId);
+                }
+                if ((raw.type === 'session.created' || raw.type === 'session.updated') && props?.info?.id) this.apiSessions.add(props.info.id);
+                if (props?.sessionID && (raw.type === 'session.status' || raw.type === 'session.idle')) {
+                  const type = raw.type === 'session.idle' ? 'idle' : props.status?.type;
+                  if (type === 'idle' || type === 'busy' || type === 'retry') {
+                    this.sessionStatuses.set(props.sessionID, { active: type !== 'idle', checkedAt: Date.now() });
+                  }
+                }
                 const normalized = normalizeOpenCodeSseEvent(raw, Date.now());
                 for (const ev of normalized) {
                   this.ctx?.emit(ev);
@@ -610,6 +696,7 @@ export class OpenCodeAdapter implements Adapter {
         if (!this.stopped) throw new Error('OpenCode event stream closed');
       } catch (err) {
         if (this.stopped) break;
+        this.sessionStatuses.clear();
         this.currentHealth.status = 'degraded';
         this.currentHealth.lastError = err instanceof Error ? err.message : String(err);
         this.ctx?.reportHealth(this.currentHealth);

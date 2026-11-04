@@ -8,4 +8,5 @@ export * from './adapters/opencode.js';
 export * from './adapters/claude.js';
 export * from './adapters/codex.js';
 export * from './adapters/agy.js';
+export * from './adapters/agy-hooks.js';
 export * from './adapters/pty.js';

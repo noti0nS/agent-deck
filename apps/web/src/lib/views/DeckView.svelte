@@ -7,7 +7,7 @@
   let selectedSessions = $state<Record<string,string>>({});
   const projects = $derived.by(() => {
     const groups = new Map<string, AgentRun[]>();
-    for (const run of deckStore.sortedRuns) {
+    for (const run of deckStore.dashboardSessions) {
       const key = run.projectPath ? run.projectPath.replaceAll('\\','/').replace(/\/$/,'') : `session:${run.id}`;
       groups.set(key, [...(groups.get(key) ?? []), run]);
     }

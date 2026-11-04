@@ -108,7 +108,8 @@ export function reduceEnvelope(state: DeckState, env: Envelope): DeckState {
         projectName: p.projectName || run.projectName,
         parentId: p.parentId ?? run.parentId,
         agentMode: p.agentMode ?? run.agentMode,
-        confidence: p.confidence ?? run.confidence
+        confidence: p.confidence ?? run.confidence,
+        historical: p.historical ?? run.historical
       };
     }
     if (p.parentId && nextRuns[p.parentId]) {
@@ -162,7 +163,8 @@ export function reduceEnvelope(state: DeckState, env: Envelope): DeckState {
         projectName: p.projectName ?? run.projectName,
         parentId: p.parentId ?? run.parentId,
         confidence: p.confidence ?? run.confidence,
-        unread: p.unread ?? run.unread
+        unread: p.unread ?? run.unread,
+        historical: p.historical ?? run.historical
       };
       if (p.parentId && nextRuns[p.parentId]) {
         const parent = nextRuns[p.parentId];
@@ -196,7 +198,8 @@ export function reduceEnvelope(state: DeckState, env: Envelope): DeckState {
         preview: previewText,
         ts: env.ts
       };
-      run.recentMessages = [msg, ...(run.recentMessages ?? [])].slice(0, 30);
+      run.recentMessages = [msg, ...(run.recentMessages ?? []).filter(m => m.id !== msg.id || m.role !== msg.role)]
+        .sort((a, b) => b.ts - a.ts).slice(0, 30);
       break;
     }
 
@@ -330,13 +333,13 @@ export function computeDeckAggregates(
   const startOfTodayMs = startOfToday.getTime();
 
   for (const run of runs) {
-    if (run.status === 'running' || run.status === 'compacting' || run.status === 'starting') {
+    if (!run.historical && (run.status === 'running' || run.status === 'compacting' || run.status === 'starting')) {
       activeCount += 1;
-    } else if (run.status === 'waiting') {
+    } else if (!run.historical && run.status === 'waiting') {
       waitingCount += 1;
-    } else if (run.status === 'stalled') {
+    } else if (!run.historical && run.status === 'stalled') {
       stalledCount += 1;
-    } else if (run.status === 'failed') {
+    } else if (!run.historical && run.status === 'failed') {
       failedCount += 1;
     }
 
@@ -355,7 +358,7 @@ export function computeDeckAggregates(
       }
     }
 
-    if (run.status === 'running' || run.status === 'compacting') {
+    if (!run.historical && (run.status === 'running' || run.status === 'compacting')) {
       const durationMin = Math.max(1, (run.lastActivityAt - run.startedAt) / 60_000);
       burnRateTokensPerMin += (run.usage.tokensIn + run.usage.tokensOut) / durationMin;
       if (typeof run.usage.costUsd === 'number' && run.usage.costUsd > 0) {

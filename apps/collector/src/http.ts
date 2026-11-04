@@ -88,6 +88,7 @@ export class CollectorEngine {
       this.state.runs,
       this.state.prefs.burnRateAlarmUsdPerMin
     );
+    this.tickTimers();
   }
 
   public setDetailProviders(
@@ -130,6 +131,7 @@ export class CollectorEngine {
       }
     }
 
+    this.tickTimers();
     this.livenessTimer = setInterval(() => {
       this.tickTimers();
     }, 5_000);
@@ -308,11 +310,13 @@ export class CollectorEngine {
   public tickTimers(now = Date.now()): void {
     const stallThresholdMs = (this.state.prefs.stallWarnSeconds ?? 120) * 1000;
     for (const run of Object.values(this.state.runs)) {
-      if (run.status === 'running' || run.status === 'done') {
+      if (!run.historical) {
+        const alive = this.adapters.get(run.source)?.sessionAlive?.(run.nativeId);
         const res = evaluateLivenessAndTimers(run, {
-          alive: true,
+          alive,
           now,
-          stallThresholdMs
+          // An authoritative busy/retry status remains valid even during a long silent tool.
+          stallThresholdMs: alive === true ? Infinity : stallThresholdMs
         });
         if (res.changed) {
           this.ingest({

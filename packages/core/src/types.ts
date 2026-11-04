@@ -121,7 +121,7 @@ export interface AdapterHealth {
   lastSeenAt?: number;
   lastError?: string;
   lagMs?: number;
-  transport?: 'poll' | 'udp' | 'sse';
+  transport?: 'poll' | 'udp' | 'sse' | 'socket';
   configured?: boolean;
   lastPolledAt?: number;
   lastEventAt?: number;
@@ -162,6 +162,8 @@ export interface RunStartedPayload {
   confidence: Confidence;
   startedAt?: number;
   historical?: boolean;
+  /** Explicit native SessionStart, never set for historical file replay. */
+  resumed?: boolean;
 }
 
 export interface RunUpdatedPayload {
@@ -174,6 +176,7 @@ export interface RunUpdatedPayload {
   parentId?: string;
   confidence?: Confidence;
   unread?: boolean;
+  historical?: boolean;
 }
 
 export interface RunEndedPayload {

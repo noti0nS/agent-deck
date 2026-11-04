@@ -29,4 +29,6 @@ export interface Adapter {
   start(ctx: AdapterContext): Promise<void>;
   stop(): Promise<void>;
   health(): AdapterHealth;
+  /** Fresh session activity evidence only (e.g. API busy). File/DB/server presence is not proof. */
+  sessionAlive?(nativeId: string): boolean | undefined;
 }

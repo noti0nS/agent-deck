@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { createSocket, type Socket } from 'node:dgram';
+import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { AdapterHealth, Capabilities, Confidence, RunStatus } from '@agent-deck/core';
 import type { Adapter, AdapterContext, EmitEventInput } from '../adapter-spi.js';
 import { withReadonlySqlite } from './readonly-sqlite.js';
+import { AGY_HOOKS_PATH, AgyHookNormalizer, agyHooksInstalled } from './agy-hooks.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -123,6 +125,33 @@ export interface AgyAdapterOptions {
   baseDir?: string;
   pollIntervalMs?: number;
   enableRemoteControl?: boolean;
+  udpPort?: number;
+  hooksPath?: string;
+}
+
+/** Read only the latest assistant text, never tool-call arguments or internal steps. */
+export function readAgyLatestMessage(transcriptPath: string): { id: string; preview: string; ts: number } | undefined {
+  let fd: number | undefined;
+  try {
+    const stat = statSync(transcriptPath);
+    const size = Math.min(stat.size, 128 * 1024);
+    const start = stat.size - size;
+    const buffer = Buffer.alloc(size);
+    fd = openSync(transcriptPath, 'r');
+    const length = readSync(fd, buffer, 0, size, start);
+    const lines = buffer.subarray(0, length).toString('utf8').split('\n');
+    if (start > 0) lines.shift();
+    for (const line of lines.reverse()) {
+      try {
+        const item = JSON.parse(line) as Record<string, unknown>;
+        if (item.type !== 'PLANNER_RESPONSE' || typeof item.content !== 'string' || !item.content.trim()) continue;
+        const ts = typeof item.created_at === 'string' ? Date.parse(item.created_at) : NaN;
+        return { id: String(item.step_index), preview: item.content.slice(0, 400), ts: Number.isFinite(ts) ? ts : stat.mtimeMs };
+      } catch { /* A writer may not have finished the final record yet. */ }
+    }
+  } catch { /* Transcripts are optional on older CLI versions. */ }
+  finally { if (fd !== undefined) closeSync(fd); }
+  return undefined;
 }
 
 export class AgyAdapter implements Adapter {
@@ -130,15 +159,23 @@ export class AgyAdapter implements Adapter {
   public readonly baseDir: string;
   private readonly pollIntervalMs: number;
   private readonly enableRemoteControl: boolean;
+  private readonly udpPort: number;
+  private readonly hooksPath: string;
+  private udpSocket: Socket | null = null;
+  private hookNormalizer = new AgyHookNormalizer();
+  private hookActivity = new Map<string, { ts: number; working: boolean }>();
   private ctx?: AdapterContext;
   private pollTimer: NodeJS.Timeout | null = null;
-  private dbMtimes = new Map<string, { mtimeMs: number; lastStepIdx: number; summary?: string }>();
+  private dbMtimes = new Map<string, { mtimeMs: number; lastStepIdx: number; summary?: string; transcriptMtime?: number }>();
+  private latestMessages = new Map<string, string>();
   private currentHealth: AdapterHealth;
 
   constructor(options: AgyAdapterOptions = {}) {
     this.baseDir = options.baseDir ?? join(homedir(), '.gemini', 'antigravity-cli');
     this.pollIntervalMs = options.pollIntervalMs ?? 2000; // 2s mtime polling (§5.5)
     this.enableRemoteControl = options.enableRemoteControl ?? false;
+    this.udpPort = options.udpPort ?? 4102;
+    this.hooksPath = options.hooksPath ?? AGY_HOOKS_PATH;
     this.currentHealth = {
       source: 'agy',
       status: 'off',
@@ -156,25 +193,28 @@ export class AgyAdapter implements Adapter {
     const convDir = join(this.baseDir, 'conversations');
     const sumDb = join(this.baseDir, 'conversation_summaries.db');
     const hasDb = existsSync(convDir) || existsSync(sumDb);
+    const hooksInstalled = agyHooksInstalled(this.hooksPath);
     let remoteControlActive = false;
 
     if (this.enableRemoteControl) {
       try {
-        const { stdout } = await execFileAsync('agy', ['remote-control', 'status', '--json'], { timeout: 2500 });
-        remoteControlActive = stdout.includes('"registered":true') || stdout.includes('"running":true');
+        const { stdout } = await execFileAsync('agy', ['remote-control', 'status'], { timeout: 2500 });
+        remoteControlActive = /^Daemon status:\s*registered\s*$/im.test(stdout);
       } catch {
         remoteControlActive = false;
       }
     }
 
     const notes: string[] = [];
+    notes.push(hooksInstalled ? `hooks=installed (udp:${this.udpPort})` : 'hooks=not installed (run `agent-deck setup agy`)');
     if (hasDb) notes.push(`db=${this.baseDir} (read-only, presence/*.lock ignored)`);
     if (this.enableRemoteControl) {
       notes.push(`remote-control=${remoteControlActive ? 'active (enabled by Agent Deck)' : 'off'}`);
     }
 
     const caps: Capabilities = {
-      liveEvents: remoteControlActive,
+      // Daemon registration is global and does not provide session events.
+      liveEvents: hooksInstalled && this.udpSocket !== null,
       // Per §5.5 & M5: gen_metadata blobs do not contain reliable token counters unless JSON metadata is present;
       // report 'none' by default so UI honestly omits cost footer instead of printing $0.00.
       usagePrecision: 'none',
@@ -185,9 +225,10 @@ export class AgyAdapter implements Adapter {
 
     this.currentHealth = {
       source: 'agy',
-      status: hasDb ? 'connected' : 'off',
+      status: hasDb || hooksInstalled ? 'connected' : 'off',
       capabilities: caps,
-      lastSeenAt: Date.now()
+      configured: hooksInstalled,
+      transport: hooksInstalled ? 'udp' : 'poll'
     };
 
     return caps;
@@ -197,6 +238,33 @@ export class AgyAdapter implements Adapter {
     this.ctx = ctx;
     await this.probe();
     ctx.reportHealth(this.currentHealth);
+
+    if (this.udpPort > 0) {
+      await new Promise<void>(resolve => {
+        const socket = createSocket('udp4');
+        socket.on('message', (message, remote) => {
+          if (remote.address !== '127.0.0.1') return;
+          try { this.ingestHookDatagram(JSON.parse(message.toString('utf8'))); }
+          catch { this.currentHealth.parseErrors = (this.currentHealth.parseErrors ?? 0) + 1; }
+        });
+        socket.on('error', error => {
+          this.currentHealth.status = 'degraded';
+          this.currentHealth.capabilities.liveEvents = false;
+          this.currentHealth.lastError = error.message;
+          this.ctx?.reportHealth(this.currentHealth);
+          try { socket.close(); } catch { /* already closed */ }
+          this.udpSocket = null;
+          resolve();
+        });
+        socket.bind(this.udpPort, '127.0.0.1', () => {
+          this.udpSocket = socket;
+          socket.unref();
+          this.currentHealth.capabilities.liveEvents = agyHooksInstalled(this.hooksPath);
+          this.ctx?.reportHealth(this.currentHealth);
+          resolve();
+        });
+      });
+    }
 
     this.pollConversations();
     this.pollTimer = setInterval(() => {
@@ -210,6 +278,48 @@ export class AgyAdapter implements Adapter {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    if (this.udpSocket) {
+      const socket = this.udpSocket;
+      this.udpSocket = null;
+      await new Promise<void>(resolve => { try { socket.close(() => resolve()); } catch { resolve(); } });
+    }
+  }
+
+  public sessionAlive(nativeId: string): boolean | undefined {
+    const evidence = this.hookActivity.get(nativeId);
+    return evidence?.working && Date.now() - evidence.ts <= 120_000 ? true : undefined;
+  }
+
+  public ingestHookDatagram(raw: Record<string, unknown>, ts = Date.now()): number {
+    if (!this.ctx || !raw || typeof raw !== 'object' || Array.isArray(raw)) return 0;
+    const events = this.hookNormalizer.normalize(raw, ts);
+    if (!events.length) return 0;
+    const nativeId = String(raw.conversationId);
+    const eventTs = events[0].ts ?? ts;
+    this.hookActivity.set(nativeId, { ts: eventTs, working: raw.hook_event_name !== 'SessionStart' && !(raw.hook_event_name === 'Stop' && (raw.fullyIdle === true || !!raw.error)) });
+    // Read a known conversation path, never an arbitrary filename from a local datagram.
+    if (raw.hook_event_name === 'PostInvocation' || raw.hook_event_name === 'Stop') {
+      const message = readAgyLatestMessage(join(this.baseDir, 'brain', nativeId, '.system_generated', 'logs', 'transcript.jsonl'));
+      if (message && this.latestMessages.get(nativeId) !== JSON.stringify(message)) {
+        this.ctx.emit({ type: 'message.completed', runId: `agy:${nativeId}`, ts: message.ts,
+          payload: { messageId: `${nativeId}:message:${message.id}`, role: 'assistant', preview: message.preview } });
+        this.latestMessages.set(nativeId, JSON.stringify(message));
+      }
+    }
+    for (const event of events) this.ctx.emit(event);
+    this.currentHealth.lastEventAt = eventTs;
+    this.currentHealth.lastSeenAt = eventTs;
+    this.ctx.reportHealth(this.currentHealth);
+    return events.length;
+  }
+
+  private emitPolled(event: EmitEventInput): boolean {
+    const nativeId = event.runId?.slice('agy:'.length) ?? '';
+    const hook = this.hookActivity.get(nativeId);
+    // Native lifecycle events take precedence over delayed SQLite snapshots.
+    if (hook && event.type !== 'usage.tick' && ((event.ts ?? 0) <= hook.ts || Date.now() - hook.ts <= 120_000)) return false;
+    this.ctx?.emit(event);
+    return !!this.ctx;
   }
 
   public health(): AdapterHealth {
@@ -273,7 +383,10 @@ export class AgyAdapter implements Adapter {
     for (const file of dbFiles.slice(0, maxConversations).reverse()) {
       const prev = this.dbMtimes.get(file.path);
       const summaryKey = JSON.stringify(summaries.get(file.id));
-      if (prev && prev.mtimeMs === file.mtimeMs && prev.summary === summaryKey) {
+      const transcriptPath = join(this.baseDir, 'brain', file.id, '.system_generated', 'logs', 'transcript.jsonl');
+      let transcriptMtime = 0;
+      try { transcriptMtime = statSync(transcriptPath).mtimeMs; } catch { /* optional */ }
+      if (prev && prev.mtimeMs === file.mtimeMs && prev.summary === summaryKey && prev.transcriptMtime === transcriptMtime) {
         continue;
       }
       const lastStepIdx = this.ingestConversationDb(
@@ -283,11 +396,12 @@ export class AgyAdapter implements Adapter {
         prev?.lastStepIdx ?? -1,
         file.mtimeMs
       );
-      this.dbMtimes.set(file.path, { mtimeMs: file.mtimeMs, lastStepIdx, summary: summaryKey });
+      this.dbMtimes.set(file.path, { mtimeMs: file.mtimeMs, lastStepIdx, summary: summaryKey, transcriptMtime });
       updatedCount += 1;
     }
 
     this.currentHealth.lastPolledAt = Date.now();
+    this.ctx.reportHealth(this.currentHealth);
     return updatedCount;
   }
 
@@ -342,7 +456,7 @@ export class AgyAdapter implements Adapter {
             }
           }
 
-          this.ctx!.emit({
+          this.emitPolled({
             type: 'run.started',
             runId,
             ts: mtimeMs,
@@ -353,6 +467,7 @@ export class AgyAdapter implements Adapter {
               projectPath: workspacePath,
               projectName,
               title,
+              subtitle: summary?.preview?.trim() || undefined,
               model: summary?.agent_name || 'gemini-2.5-pro',
               confidence,
               startedAt: mtimeMs
@@ -371,7 +486,7 @@ export class AgyAdapter implements Adapter {
 
         const latest = db.prepare('SELECT idx, status, permissions FROM steps ORDER BY idx DESC LIMIT 1').get() as AgyStepRow | undefined;
         const pending = latest?.status === 5 && summary?.status !== 'CASCADE_RUN_STATUS_IDLE' && decodeAgyPermissions(latest.permissions);
-        if (!pending) this.ctx!.emit({ type: 'attention.cleared', runId, ts: mtimeMs, payload: { reason: 'agy_reconciled' } });
+        if (!pending) this.emitPolled({ type: 'attention.cleared', runId, ts: mtimeMs, payload: { reason: 'agy_reconciled' } });
 
         for (const step of steps) {
           maxStepIdx = Math.max(maxStepIdx, step.idx);
@@ -379,7 +494,7 @@ export class AgyAdapter implements Adapter {
           const permSummary = decodeAgyPermissions(step.permissions);
 
           if (pending && step.idx === latest?.idx && permSummary) {
-            this.ctx!.emit({
+            this.emitPolled({
               type: 'attention.raised',
               runId,
               ts: mtimeMs,
@@ -394,7 +509,7 @@ export class AgyAdapter implements Adapter {
             });
           } else if (decoded.toolName) {
             if (step.status === 2) {
-              this.ctx!.emit({
+              this.emitPolled({
                 type: 'tool.started',
                 runId,
                 ts: mtimeMs,
@@ -406,7 +521,7 @@ export class AgyAdapter implements Adapter {
                 }
               });
             } else {
-              this.ctx!.emit({
+              this.emitPolled({
                 type: 'tool.completed',
                 runId,
                 ts: mtimeMs,
@@ -429,7 +544,7 @@ export class AgyAdapter implements Adapter {
           for (const g of genRows) {
             const usage = decodeAgyUsageBlob(g.data);
             if (usage) {
-              this.ctx!.emit({
+              this.emitPolled({
                 type: 'usage.tick',
                 runId,
                 ts: mtimeMs,
@@ -447,18 +562,31 @@ export class AgyAdapter implements Adapter {
           // ignore
         }
 
-        if (steps.length > 0) {
-          const lastStep = steps[steps.length - 1];
-          const finalStatus = mapAgyStepStatus(lastStep.status, summary?.status);
+        const message = readAgyLatestMessage(join(this.baseDir, 'brain', convId, '.system_generated', 'logs', 'transcript.jsonl'));
+        if (message) {
+          const signature = JSON.stringify(message);
+          if (this.latestMessages.get(convId) !== signature) {
+            if (this.emitPolled({ type: 'message.completed', runId, ts: message.ts,
+              payload: { messageId: `${convId}:message:${message.id}`, role: 'assistant', preview: message.preview } })) {
+              this.latestMessages.set(convId, signature);
+            }
+          }
+        }
+
+        // Empty database files are created even for abandoned conversations.
+        // Neither file existence nor a remote-control daemon proves session liveness.
+        {
+          const finalStatus = latest ? mapAgyStepStatus(latest.status, summary?.status)
+            : summary?.status === 'CASCADE_RUN_STATUS_IDLE' ? 'idle' : 'detached';
           if (!pending) {
-            this.ctx!.emit({
+            this.emitPolled({
               type: 'state.changed',
               runId,
               ts: mtimeMs,
               payload: {
                 from: 'starting',
                 to: finalStatus,
-                reason: `step_${lastStep.idx}_status_${lastStep.status}`,
+                reason: latest ? `step_${latest.idx}_status_${latest.status}` : 'no_conversation_activity',
                 confidence
               }
             });

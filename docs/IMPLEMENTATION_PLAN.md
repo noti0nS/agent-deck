@@ -897,7 +897,7 @@ slot machine.
 
 | Concern | Mitigation |
 |---|---|
-| **Monitor blocks a CLI** | Hooks are UDP fire-and-forget + always `exit 0`. Shim has a hard 10 ms self-timeout. |
+| **Monitor blocks a CLI** | Hooks are UDP fire-and-forget + always `exit 0`. Shim has a hard 100 ms self-timeout (revised after Windows scheduling tests dropped a terminal event with the original 10 ms budget). |
 | **Monitor corrupts source data** | All source DBs opened `mode=ro&immutable=1`. No writes, ever. |
 | **Secrets in transcripts** | `Redactor` runs before persist and before stream: strips `sk-…`, `ghp_…`, `AKIA…`, bearer tokens, `password=`/`token=` values, `.env` bodies, and absolute paths under known credential dirs (`~/.ssh`, `.aws`, `.codex/auth.json`). Deny-list is config-driven and tested. |
 | **Tablet holds credentials** | It holds a scoped session cookie only. No API keys ever reach the client; the collector never exposes tokens/costs of credentials, only session usage. |

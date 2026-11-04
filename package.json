@@ -25,6 +25,7 @@
     "@playwright/test": "^1.51.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.5",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.7"

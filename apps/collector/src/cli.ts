@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { Source } from '@agent-deck/core';
 import { adapterHealthToDoctor, formatDoctorReport } from '@agent-deck/doctor';
 import { AgyAdapter } from './adapters/agy.js';
+import { setupAgyHooks, uninstallAgyHooks } from './adapters/agy-hooks.js';
 import {
   ClaudeAdapter,
   setupClaudeHooks,
@@ -142,25 +143,30 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     return 0;
   }
 
-  if (cmd === 'setup' && args[0] === 'claude') {
+  if (cmd === 'setup' && (args[0] === 'claude' || args[0] === 'agy')) {
     const dryRun = args.includes('--dry-run');
     const shimName = process.platform === 'win32' ? 'agent-deck-hook.exe' : 'agent-deck-hook';
     const exePath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', shimName);
     // Built by `npm run build:hooks`. Falls back to PATH for packaged installs
     // that ship the shim alongside the CLI instead of in the repo tree.
     const commandPath = existsSync(exePath) ? exePath : 'agent-deck-hook';
-    const res = setupClaudeHooks({ commandPath, dryRun });
+    const res = args[0] === 'agy' ? setupAgyHooks({ commandPath, dryRun }) : setupClaudeHooks({ commandPath, dryRun });
     console.log(res.diff);
     if (res.backupPath) {
       console.log(`\nBacked up original settings to: ${res.backupPath}`);
     }
     if (res.modified) {
-      console.log('Claude Code hooks installed (tagged `_source: "agent-deck"`).');
+      console.log(`${args[0] === 'agy' ? 'Antigravity' : 'Claude Code'} observer hooks installed.`);
     }
     return 0;
   }
 
   if (cmd === 'uninstall') {
+    if (args[0] === 'agy') {
+      const res = uninstallAgyHooks();
+      console.log(res.restored ? 'Removed Agent Deck Antigravity hooks.' : 'No Antigravity hook changes found.');
+      return 0;
+    }
     const res = uninstallClaudeHooks();
     console.log(res.restored ? 'Removed agent-deck hooks from ~/.claude/settings.json.' : 'No Claude hook changes found.');
     return 0;
@@ -267,7 +273,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     return 0;
   }
 
-  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|uninstall|pair|run|import|mcp>`);
+  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|setup agy|uninstall [claude|agy]|pair|run|import|mcp>`);
   return 0;
 }
 

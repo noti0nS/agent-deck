@@ -6,7 +6,8 @@ import { CollectorEngine, buildHttpServer } from '../apps/collector/src/http.js'
 test('phone touch scroll keeps navigation visible and reaches the last card', async ({ browser }) => {
   const store = new CollectorStore(':memory:');
   const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
-  for (let i = 0; i < 6; i++) engine.ingest({ type: 'run.started', runId: `codex:${i}`, payload: {
+  const seedTime = Date.now() - 10_000;
+  for (let i = 0; i < 6; i++) engine.ingest({ type: 'run.started', runId: `codex:${i}`, ts: seedTime + i, payload: {
     source: 'codex', nativeId: String(i), title: `Session ${i}`, projectName: 'Mobile test',
     projectPath: '/test/' + (i === 5 ? 0 : i), model: 'gpt-5', confidence: 'polled'
   } });
@@ -58,9 +59,9 @@ test('phone touch scroll keeps navigation visible and reaches the last card', as
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     await expect(page.getByTestId('telemetry-card')).toBeVisible();
     const sessions = page.getByRole('combobox', { name: 'Session in Mobile test' });
-    await expect(sessions.locator('option')).toHaveCount(2);
-    await sessions.selectOption('codex:0');
-    await expect(page.locator('[data-run-id="codex:0"]')).toBeVisible();
+    await expect(sessions).toHaveCount(0);
+    await expect(page.locator('[data-run-id="codex:5"]')).toBeVisible();
+    await expect(page.locator('[data-run-id="codex:0"]')).toHaveCount(0);
     await page.setViewportSize({width: 900, height: 1200});
     await page.evaluate(() => window.scrollTo(0,0));
     await page.screenshot({path:'test-results/reference-layout-tablet.png',fullPage:true});
