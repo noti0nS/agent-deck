@@ -28,6 +28,8 @@
   let byModel = $state<Array<{ key: string; tokensIn: number; tokensOut: number; exactCostUsd: number; estimatedCostUsd: number; precision: string; runs: number; turns: number }>>([]);
   let unproductiveRuns = $state<AgentRun[]>([]);
 
+  const visibleUnproductiveRuns = $derived(unproductiveRuns.filter(r => deckStore.visibleSources.includes(r.source)));
+
   async function loadUsage() {
     const now = Date.now();
     const startOfToday = new Date();
@@ -268,11 +270,11 @@
   <!-- Expensive & Low-Output Runs (§7.4) -->
   <div class="bezel-specular rounded p-3.5 sm:p-4 space-y-2.5">
     <div class="chrome-label">High-Burn / Low-File-Delta Sessions</div>
-    {#if unproductiveRuns.length === 0}
+    {#if visibleUnproductiveRuns.length === 0}
       <p class="text-[13px] text-[#8B93A6] font-mono-tabular">No sessions recorded yet.</p>
     {:else}
       <div class="divide-y divide-[#212631] font-mono-tabular text-[12px] sm:text-[13px]">
-        {#each unproductiveRuns as r (r.id)}
+        {#each visibleUnproductiveRuns as r (r.id)}
           {@const srcColor = SOURCE_COLORS[r.source] ?? '#6BA6FF'}
           <button
             type="button"

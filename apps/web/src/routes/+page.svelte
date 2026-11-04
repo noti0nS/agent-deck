@@ -1,5 +1,6 @@
 <script lang="ts">
   import { deckStore, type ViewName } from '$lib/stores/deck.svelte';
+  import SourceSelector from '$lib/components/SourceSelector.svelte';
   import AmbientView from '$lib/views/AmbientView.svelte';
   import DeckView from '$lib/views/DeckView.svelte';
   import UsageView from '$lib/views/UsageView.svelte';
@@ -54,7 +55,7 @@
   }
 
   const degradedAdapters = $derived(
-    Object.values(deckStore.state.adapters).filter((a) => a.status === 'degraded')
+    Object.values(deckStore.state.adapters).filter((a) => a.status === 'degraded' && deckStore.visibleSources.includes(a.source))
   );
 </script>
 
@@ -105,6 +106,7 @@
       </div>
     {/if}
 
+    {#if deckStore.activeView !== 'ambient'}<SourceSelector />{/if}
     <!-- Active View Container -->
     {#if deckStore.activeView === 'ambient'}
       <AmbientView />

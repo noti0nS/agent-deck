@@ -49,6 +49,7 @@ export function parseAgyWorkspacePath(workspaceUris: string | null | undefined):
 
 export function mapAgyStepStatus(statusNum: number, summaryStatus?: string | null): RunStatus {
   // In agy steps: 1 = pending/starting, 2 = running, 3 = completed/done, 4 = failed, 5 = waiting/cancelled
+  if (summaryStatus === 'CASCADE_RUN_STATUS_IDLE') return 'idle';
   if (statusNum === 2) return 'running';
   if (statusNum === 4) return 'failed';
   if (statusNum === 5) return 'waiting';
@@ -131,7 +132,7 @@ export class AgyAdapter implements Adapter {
   private readonly enableRemoteControl: boolean;
   private ctx?: AdapterContext;
   private pollTimer: NodeJS.Timeout | null = null;
-  private dbMtimes = new Map<string, { mtimeMs: number; lastStepIdx: number }>();
+  private dbMtimes = new Map<string, { mtimeMs: number; lastStepIdx: number; summary?: string }>();
   private currentHealth: AdapterHealth;
 
   constructor(options: AgyAdapterOptions = {}) {
@@ -257,7 +258,7 @@ export class AgyAdapter implements Adapter {
         const fullPath = join(convDir, entry.name);
         try {
           const st = statSync(fullPath);
-          dbFiles.push({ id, path: fullPath, mtimeMs: st.mtimeMs });
+          dbFiles.push({ id, path: fullPath, mtimeMs: Math.max(st.mtimeMs, existsSync(fullPath + '-wal') ? statSync(fullPath + '-wal').mtimeMs : 0) });
         } catch {
           // ignore
         }
@@ -271,7 +272,8 @@ export class AgyAdapter implements Adapter {
 
     for (const file of dbFiles.slice(0, maxConversations).reverse()) {
       const prev = this.dbMtimes.get(file.path);
-      if (prev && prev.mtimeMs === file.mtimeMs) {
+      const summaryKey = JSON.stringify(summaries.get(file.id));
+      if (prev && prev.mtimeMs === file.mtimeMs && prev.summary === summaryKey) {
         continue;
       }
       const lastStepIdx = this.ingestConversationDb(
@@ -281,11 +283,11 @@ export class AgyAdapter implements Adapter {
         prev?.lastStepIdx ?? -1,
         file.mtimeMs
       );
-      this.dbMtimes.set(file.path, { mtimeMs: file.mtimeMs, lastStepIdx });
+      this.dbMtimes.set(file.path, { mtimeMs: file.mtimeMs, lastStepIdx, summary: summaryKey });
       updatedCount += 1;
     }
 
-    this.currentHealth.lastSeenAt = Date.now();
+    this.currentHealth.lastPolledAt = Date.now();
     return updatedCount;
   }
 
@@ -362,17 +364,21 @@ export class AgyAdapter implements Adapter {
           .prepare(
             `SELECT idx, step_type, status, has_subtrajectory, metadata, error_details, permissions, task_details, step_payload
              FROM steps
-             WHERE idx > ?
+             WHERE idx >= ?
              ORDER BY idx ASC`
           )
           .all(afterStepIdx) as AgyStepRow[];
+
+        const latest = db.prepare('SELECT idx, status, permissions FROM steps ORDER BY idx DESC LIMIT 1').get() as AgyStepRow | undefined;
+        const pending = latest?.status === 5 && summary?.status !== 'CASCADE_RUN_STATUS_IDLE' && decodeAgyPermissions(latest.permissions);
+        if (!pending) this.ctx!.emit({ type: 'attention.cleared', runId, ts: mtimeMs, payload: { reason: 'agy_reconciled' } });
 
         for (const step of steps) {
           maxStepIdx = Math.max(maxStepIdx, step.idx);
           const decoded = decodeAgyStepMetadata(step.metadata ?? step.step_payload);
           const permSummary = decodeAgyPermissions(step.permissions);
 
-          if (permSummary) {
+          if (pending && step.idx === latest?.idx && permSummary) {
             this.ctx!.emit({
               type: 'attention.raised',
               runId,
@@ -408,7 +414,7 @@ export class AgyAdapter implements Adapter {
                   stepId: `${convId}:step:${step.idx}`,
                   label: decoded.toolName,
                   detail: decoded.detail ?? decoded.toolName,
-                  ok: step.status !== 4
+                  ok: step.status === 3 ? true : step.status === 4 ? false : undefined
                 }
               });
             }
@@ -444,7 +450,7 @@ export class AgyAdapter implements Adapter {
         if (steps.length > 0) {
           const lastStep = steps[steps.length - 1];
           const finalStatus = mapAgyStepStatus(lastStep.status, summary?.status);
-          if (!decodeAgyPermissions(lastStep.permissions)) {
+          if (!pending) {
             this.ctx!.emit({
               type: 'state.changed',
               runId,

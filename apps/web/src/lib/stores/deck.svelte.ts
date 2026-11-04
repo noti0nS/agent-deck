@@ -1,5 +1,7 @@
 import {
   createInitialDeckState,
+  computeDeckAggregates,
+  type Source,
   getSortedDeckRuns,
   reduceWireFrame,
   type AgentRun,
@@ -14,6 +16,13 @@ const VIEW_STORAGE_KEY = 'agent_deck_active_view';
 
 class DeckClientStore {
   public state = $state<DeckState>(createInitialDeckState());
+  public visibleSources = $state<Source[]>(['opencode', 'claude', 'codex', 'agy', 'pty']);
+  public toggleSource(source: Source): void {
+    this.visibleSources = this.visibleSources.includes(source) ? this.visibleSources.filter(s => s !== source) : [...this.visibleSources, source];
+    try { localStorage.setItem('agent_deck_sources', JSON.stringify(this.visibleSources)); } catch {}
+    if (this.selectedRunId && !this.visibleSources.includes(this.state.runs[this.selectedRunId]?.source)) this.backFromDetail();
+  }
+  public get visibleAggregates() { return computeDeckAggregates(Object.fromEntries(this.sortedRuns.map(r => [r.id, r])), this.state.prefs.burnRateAlarmUsdPerMin); }
   public activeView = $state<ViewName>('deck');
   public previousView = $state<ViewName>('deck');
   public selectedRunId = $state<string | null>(null);
@@ -38,7 +47,7 @@ class DeckClientStore {
   private knownWaitingIds = new Set<string>();
 
   public get sortedRuns(): AgentRun[] {
-    return getSortedDeckRuns(this.state.runs);
+    return getSortedDeckRuns(this.state.runs).filter(run => this.visibleSources.includes(run.source));
   }
 
   public get selectedRun(): AgentRun | null {
@@ -49,6 +58,10 @@ class DeckClientStore {
   public init(): () => void {
     if (typeof window === 'undefined') return () => {};
 
+    try {
+      const saved = JSON.parse(localStorage.getItem('agent_deck_sources') ?? 'null');
+      if (Array.isArray(saved)) this.visibleSources = saved.filter((s): s is Source => ['opencode','claude','codex','agy','pty'].includes(s));
+    } catch {}
     const savedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewName | null;
     if (savedView && ['ambient', 'deck', 'usage', 'ledger'].includes(savedView)) {
       this.activeView = savedView;
@@ -207,12 +220,12 @@ class DeckClientStore {
     es.onmessage = (event) => {
       try {
         const frame = JSON.parse(event.data) as WireFrame;
-        const prevWaitingCount = this.state.aggregates.waitingCount;
+        const prevWaitingCount = this.visibleAggregates.waitingCount;
         this.state = reduceWireFrame(this.state, frame, Date.now());
         this.syncWaitingAnnouncements();
 
         // Instant wake from Ambient if a new attention state arrives (§14 D7)
-        if (this.activeView === 'ambient' && this.state.aggregates.waitingCount > prevWaitingCount) {
+        if (this.activeView === 'ambient' && this.visibleAggregates.waitingCount > prevWaitingCount) {
           this.setView('deck');
         }
       } catch {
@@ -232,7 +245,7 @@ class DeckClientStore {
   }
 
   private syncWaitingAnnouncements(): void {
-    for (const run of Object.values(this.state.runs)) {
+    for (const run of this.sortedRuns) {
       if (run.status === 'waiting' && !this.knownWaitingIds.has(run.id)) {
         this.knownWaitingIds.add(run.id);
         this.waitingAnnouncement = `${run.source} in ${run.projectName} is waiting on you: ${run.attention?.summary ?? 'attention needed'}`;
@@ -248,7 +261,7 @@ class DeckClientStore {
     if (
       this.activeView === 'deck' &&
       idleSec >= targetIdle &&
-      this.state.aggregates.waitingCount === 0
+      this.visibleAggregates.waitingCount === 0
     ) {
       this.setView('ambient');
     }

@@ -109,6 +109,21 @@ describe('AgyAdapter & SQLite Fixture Replay', () => {
     expect(run.usage.precision).toBe('none');
     expect(run.usage.costUsd).toBeUndefined();
 
+    // A completed step retains permission metadata; it is no longer a request.
+    const changed = new Database(join(convDir, 'conv-agy-1.db'));
+    changed.pragma('journal_mode = WAL');
+    changed.prepare('UPDATE steps SET status = 3 WHERE idx = 1').run();
+    const summaries = new Database(join(tempBase, 'conversation_summaries.db'));
+    summaries.prepare("UPDATE conversation_summaries SET status = 'CASCADE_RUN_STATUS_IDLE'").run();
+    summaries.close();
+    adapter.pollConversations();
+    expect(engine.state.runs['agy:conv-agy-1'].status).toBe('idle');
+    expect(engine.state.runs['agy:conv-agy-1'].attention).toBeUndefined();
+    // Replaying history must not resurrect the completed permission.
+    adapter.ingestConversationDb('conv-agy-1', join(convDir, 'conv-agy-1.db'));
+    expect(engine.state.runs['agy:conv-agy-1'].status).toBe('idle');
+    expect(engine.state.runs['agy:conv-agy-1'].attention).toBeUndefined();
+    changed.close();
     store.close();
     rmSync(tempBase, { recursive: true, force: true });
   });

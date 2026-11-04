@@ -34,7 +34,7 @@
 
 <div
   class="min-h-screen transition-opacity duration-500 {deckStore.isNightDimmed && deckStore.activeView === 'ambient' ? 'opacity-65' : 'opacity-100'}"
-  style="transform: translate({deckStore.pixelShift.x}px, {deckStore.pixelShift.y}px);"
+  style={deckStore.activeView === 'ambient' ? `transform: translate(${deckStore.pixelShift.x}px, ${deckStore.pixelShift.y}px);` : undefined}
 >
   {@render children()}
 </div>

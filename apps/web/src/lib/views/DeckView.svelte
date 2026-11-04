@@ -4,7 +4,7 @@
   import RunCard from '$lib/components/RunCard.svelte';
 
   const runs = $derived(deckStore.sortedRuns);
-  const agg = $derived(deckStore.state.aggregates);
+  const agg = $derived(deckStore.visibleAggregates);
   const prefs = $derived(deckStore.state.prefs);
 
   // Auto-collapse `done` after 2 min, cap Deck at 6 with "show all" drawer (§12 R11)

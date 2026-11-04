@@ -27,7 +27,7 @@ html, body {
   background-image: radial-gradient(circle at 50% 0%, rgba(107, 166, 255, 0.035), transparent 55%);
   color: var(--text);
   font-family: 'Geist', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow-x: hidden;
+  overflow-x: clip;
   user-select: none;
   -webkit-user-select: none;
   padding-top: env(safe-area-inset-top);
@@ -115,15 +115,17 @@ html, body {
   }
 }
 
-/* Touch ergonomics: no 300ms delay, no grey tap flash, no rubber-band bounce. */
+/* Keep the document as the vertical scroller; hidden overflow on body creates
+   a second scroll container and can trap touch gestures on mobile browsers. */
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  overscroll-behavior-y: none;
+  overflow-y: auto;
 }
 
 body {
-  overscroll-behavior-y: none;
+  overflow-y: visible;
+  min-height: 100dvh;
 }
 
 button,
@@ -142,7 +144,7 @@ textarea {
 
 /* Breathing room for content that scrolls beneath the fixed nav bar. */
 .pb-nav {
-  padding-bottom: 4.75rem;
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
 }
 
 @media (min-width: 40rem) {

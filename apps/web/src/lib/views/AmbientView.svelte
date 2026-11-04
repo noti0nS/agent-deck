@@ -3,7 +3,7 @@
   import { formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '$lib/format';
 
   const runs = $derived(deckStore.sortedRuns.slice(0, 6));
-  const agg = $derived(deckStore.state.aggregates);
+  const agg = $derived(deckStore.visibleAggregates);
 </script>
 
 <!-- Ambient View (§8.2): chrome-free, 2x type size for across-the-room legibility -->
