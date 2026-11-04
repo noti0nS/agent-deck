@@ -29,7 +29,7 @@ right now, how much it costs, and what it touched.
   small Go binary that sends one UDP datagram and exits 0 within a hard 10 ms
   deadline — fire-and-forget, fail-open, no retries.
 - **No public bind.** The collector refuses to listen on `0.0.0.0`/`::`; it binds
-  loopback or a Tailscale interface only.
+  loopback or Tailscale by default; an explicit private LAN address can be enabled.
 - **Redaction is built in.** `@agent-deck/redact` scrubs credentials and sensitive
   paths (`~/.ssh`, `~/.aws`, `.codex/auth.json`, gcloud, kube config, …) before
   events are stored.
@@ -56,6 +56,18 @@ npm run agent-deck pair   # prints a QR code + 5-minute pairing code
 ```
 
 ## CLI
+
+### Optional local Wi-Fi
+
+Set `AGENT_DECK_LAN_HOST` to the PC's private IPv4 address before starting.
+This adds a listener on port 4100 while preserving loopback and Tailscale.
+On this PC run `./start-local-wifi.ps1` after stopping any existing collector,
+then open `http://192.168.0.3:4100`. Allow TCP 4100 from the local subnet in
+Windows Firewall. Update the script and rule if DHCP changes the PC's address.
+Run `npm run agent-deck -- pair` and enter its code on the LAN page, ignoring
+the printed Tailscale URL. LAN data requires pairing. HTTP is for trusted home
+Wi-Fi; browser installation/service-worker features still require HTTPS.
+
 
 Every command runs through `npm run agent-deck -- <cmd>`, or `agent-deck` once the
 package is linked.

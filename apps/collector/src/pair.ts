@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
@@ -51,6 +52,8 @@ export class PairingManager {
   }
 
   public verifyCode(inputCode: string, now = Date.now()): boolean {
+    // The pair CLI writes through another connection while the server is running.
+    this.state = this.store.getSetting<PairingState>('pairing') ?? this.state;
     if (!this.state.activeCode || !this.state.codeExpiresAt) return false;
     if (now > this.state.codeExpiresAt) return false;
     const normalizedInput = inputCode.trim().toUpperCase();
@@ -65,14 +68,23 @@ export class PairingManager {
 }
 
 export function renderAsciiQr(text: string): string {
-  // Deterministic compact matrix representation for terminal QR display
-  const hash = Buffer.from(text, 'utf8');
+  const { modules } = QRCode.create(text, { errorCorrectionLevel: 'M' });
+  const margin = 4;
+  const size = modules.size + margin * 2;
+  const dark = (x: number, y: number) => x >= margin && y >= margin &&
+    x < size - margin && y < size - margin &&
+    modules.get(y - margin, x - margin);
   const lines: string[] = [];
-  lines.push('  ██▀▀▀▀▀██ ▄▀ ██▀▀▀▀▀██');
-  const mid1 = (hash[0] ?? 0) % 2 === 0 ? '▀██' : '▄██';
-  const mid2 = (hash[1] ?? 0) % 2 === 0 ? '▀▀' : '▄▄';
-  lines.push(`  ██ ${mid1} ██ ${mid2} ██ ${mid1} ██`);
-  lines.push('  ██▄▄▄▄▄██ ▄▄ ██▄▄▄▄▄██');
+  for (let y = 0; y < size; y += 2) {
+    let line = '';
+    for (let x = 0; x < size; x++) {
+      const top = dark(x, y);
+      const bottom = dark(x, y + 1);
+      line += top ? (bottom ? '\u2588' : '\u2580') : (bottom ? '\u2584' : ' ');
+    }
+    // Explicit black on white makes the code independent of terminal theme.
+    lines.push('\x1b[30;47m' + line + '\x1b[0m');
+  }
   return lines.join('\n');
 }
 
@@ -97,6 +109,15 @@ export function findTailscaleAddress(): string | undefined {
 }
 
 export async function getTailscaleMagicDnsUrl(port = 4100): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync('tailscale', ['serve', 'status', '--json'], { timeout: 3000 });
+    const config = JSON.parse(stdout) as { Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }> };
+    for (const [address, site] of Object.entries(config.Web ?? {})) {
+      if (site.Handlers?.['/']?.Proxy === `http://127.0.0.1:${port}`) {
+        return `https://${address.replace(/:443$/, '')}`;
+      }
+    }
+  } catch { /* Fall back to device discovery when serve config is unavailable. */ }
   try {
     const { stdout } = await execFileAsync('tailscale', ['status', '--json'], { timeout: 3000 });
     const data = JSON.parse(stdout) as { Self?: { DNSName?: string } };
@@ -124,7 +145,9 @@ export async function configureTailscaleServe(
     args.push(String(port));
     const { stdout } = await execFileAsync('tailscale', args, { timeout: 5000 });
     const base = await getTailscaleMagicDnsUrl(port);
-    const url = base && httpsPort && httpsPort !== 443 ? `${base}:${httpsPort}` : base;
+    const published = base ? new URL(base) : undefined;
+    if (published && httpsPort) published.port = httpsPort === 443 ? '' : String(httpsPort);
+    const url = published?.origin;
     return {
       ok: true,
       url,

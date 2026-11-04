@@ -200,10 +200,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const store = new CollectorStore(dbPath);
     const engine = new CollectorEngine({ store });
     const { code } = engine.pairing.generatePairingCode();
-    const tsUrl = (await getTailscaleMagicDnsUrl()) ?? 'https://deck.<tailnet>.ts.net';
+    const tsUrl = process.env.AGENT_DECK_LAN_HOST
+      ? `http://${process.env.AGENT_DECK_LAN_HOST}:${process.env.AGENT_DECK_PORT || 4100}`
+      : (await getTailscaleMagicDnsUrl()) ?? 'https://deck.<tailnet>.ts.net';
     const qr = renderAsciiQr(`${tsUrl}?code=${code}`);
     console.log('  Scan to open Agent Deck on your tablet');
-    console.log(`${qr}   ${tsUrl}`);
+    console.log(qr);
+    console.log(tsUrl);
     console.log(`                             code: ${code}  (expires 5 min)`);
     store.close();
     return 0;
@@ -260,6 +263,17 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     }
 
     await app.listen({ port, host });
+    // Opt-in LAN listener shares the engine, but remote clients must pair.
+    const lanHost = process.env.AGENT_DECK_LAN_HOST;
+    if (lanHost) {
+      const parts = lanHost.split('.').map(Number);
+      const privateIp = parts.length === 4 && parts.every(n => Number.isInteger(n) && n >= 0 && n <= 255) &&
+        (parts[0] === 10 || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || (parts[0] === 192 && parts[1] === 168));
+      if (!privateIp) throw new Error('AGENT_DECK_LAN_HOST must be a specific private IPv4 address.');
+      const lanApp = await buildHttpServer(engine, { staticDir: existsSync(staticDir) ? staticDir : undefined });
+      await lanApp.listen({ port, host: lanHost });
+      console.log(`Local Wi-Fi: http://${lanHost}:${port} (device pairing required)`);
+    }
     const tsAddress = findTailscaleAddress();
     // Publish on HTTPS :443 by default; set AGENT_DECK_SERVE_HTTPS_PORT to use a
     // dedicated port when another app already owns the tailnet root.

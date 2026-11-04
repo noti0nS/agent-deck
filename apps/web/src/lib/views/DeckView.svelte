@@ -23,6 +23,7 @@
   ]);
 </script>
 <section data-testid="deck-view" class="clean-deck">
+  <div class="deck-heading"><div><p class="deck-eyebrow">Workspace overview</p><h1>Projects</h1></div><p>Every session, at a glance.</p></div>
   <div class="deck-toolbar">
     <div class="status-filters" aria-label="Project status">{#each tabs as tab}<button type="button" aria-pressed={filter === tab.id} onclick={() => filter = tab.id} class:chosen={filter === tab.id}>{tab.label} ({tab.count})</button>{/each}</div>
     <span class="sync-label"><span class:connected={deckStore.connectionStatus === 'connected'}></span>{deckStore.connectionStatus === 'connected' ? 'Live session sync' : 'Showing last known state'}</span>

@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { Settings } from "@lucide/svelte";
   import { deckStore, type ViewName } from '$lib/stores/deck.svelte';
   import { formatTokens } from '$lib/format';
+  import PairCodeInput from '$lib/components/PairCodeInput.svelte';
   import SourceSelector from '$lib/components/SourceSelector.svelte';
   import AmbientView from '$lib/views/AmbientView.svelte';
   import DeckView from '$lib/views/DeckView.svelte';
@@ -15,6 +17,10 @@
 
   async function onPairSubmit(e: SubmitEvent) {
     e.preventDefault();
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(pairCodeInput)) {
+      pairError = true;
+      return;
+    }
     const ok = await deckStore.submitPairCode(pairCodeInput);
     pairError = !ok;
   }
@@ -41,17 +47,9 @@
         Run <code class="font-mono-tabular px-1.5 py-0.5 bg-[#0D0F14] border border-[#212631] rounded text-[#ECEDF2]">agent-deck pair</code> on your PC and enter the 8-character code.
       </p>
       <form onsubmit={onPairSubmit} class="space-y-3">
-        <input
-          type="text"
-          bind:value={pairCodeInput}
-          placeholder="7F2K-9QRT"
-          autocomplete="one-time-code"
-          autocapitalize="characters"
-          spellcheck="false"
-          class="w-full h-12 px-3 bg-[#090A0D] border border-[#212631] focus:border-[#6BA6FF] focus:outline-none rounded font-mono-tabular text-[18px] text-[#ECEDF2] uppercase tracking-widest"
-        />
+        <PairCodeInput bind:value={pairCodeInput} invalid={pairError} />
         {#if pairError}
-          <p class="text-[13px] text-[#FF5E5E] font-mono-tabular">✕ Invalid or expired pairing code.</p>
+          <p id="pair-code-error" role="alert" class="text-[13px] text-[#FF5E5E] font-mono-tabular">✕ Invalid or expired pairing code.</p>
         {/if}
         <button
           type="submit"
@@ -84,7 +82,7 @@
           {#if deckStore.visibleAggregates.burnRateAlarm}<span class="attention-count" data-testid="burn-rate-alarm">High spend · ${deckStore.visibleAggregates.burnRateUsdPerMin.toFixed(2)}/min</span>{/if}
           <span class="dashboard-tokens">{formatTokens(deckStore.visibleAggregates.todayTokensIn + deckStore.visibleAggregates.todayTokensOut)} tok today</span>
           <div class="settings-anchor">
-            <button type="button" class="dashboard-settings" aria-label="Settings" aria-expanded={settingsOpen} onclick={() => settingsOpen = !settingsOpen}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button type="button" class="dashboard-settings" aria-label="Settings" aria-expanded={settingsOpen} onclick={() => settingsOpen = !settingsOpen}><Settings size={18} strokeWidth={1.6} aria-hidden="true" /></button>
           </div>
         </div>
       </header>

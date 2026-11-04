@@ -184,3 +184,49 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,s
 @media(min-width:768px) { .session-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(min-width:1280px) { .session-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:767px) { .dashboard-shell { padding:76px 16px 24px; }.dashboard-header { padding:0 16px; gap:8px; }.dashboard-host,.dashboard-tokens { display:none; }.dashboard-summary { gap:4px; }.dashboard-summary>.attention-count { display:none; }.deck-toolbar { flex-wrap:wrap; gap:8px; }.status-filters button { min-height:48px; font-size:12px; padding:8px 10px; }.session-card,.telemetry-card { min-height:250px; }.clean-deck { gap:16px; } }
+
+/* Deliberate hierarchy and restrained interaction feedback. */
+.deck-heading { display:flex; align-items:end; justify-content:space-between; gap:16px; }
+.deck-eyebrow { font-size:10px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#929aa5; margin-bottom:6px; }
+.deck-heading h1 { font-size:28px; font-weight:600; letter-spacing:-1px; line-height:1.2; }
+.deck-heading>p { font-size:12px; color:#929aa5; }
+.dashboard-brand>span { border-radius:5px; padding:4px 6px; }
+.status-filters { padding:4px; background:#0c0e11; border:1px solid #25282d; border-radius:10px; }
+.status-filters button { border-radius:7px; transition:background 160ms,color 160ms; }
+.status-filters button.chosen { background:#272b31; border-color:#3a4048; box-shadow:0 1px 3px #0004; }
+.project-panel { border:1px solid #30343a; border-radius:12px; overflow:hidden; transition:border-color 180ms,box-shadow 180ms,transform 180ms; animation:deck-arrive 280ms ease-out both; }
+.session-card { border-radius:0; background:#1b1e23; }
+.session-card,.telemetry-card { padding:20px; gap:12px; }
+.session-heading h3 { font-size:16px; letter-spacing:-.3px; }
+.session-status { font-size:10px; background:transparent; padding:4px 0; }
+.session-descriptor { font-family:inherit; font-size:12px; color:#929aa5; }
+.session-command { background:#14171b; border:1px solid #292e35; border-radius:7px; padding:12px; }
+.session-command-label { font-family:inherit; font-size:9px; font-weight:600; letter-spacing:.09em; color:#929aa5; }
+.session-command p { background:transparent; padding:4px 0 0; color:#cbd0d8; line-height:1.7; }
+.session-footer { color:#929aa5; padding-top:12px; font-variant-numeric:tabular-nums; }
+.telemetry-card { border:1px solid #30343a; border-radius:12px; background:#191c21; }
+.telemetry-tag { border-radius:4px; font-size:9px; letter-spacing:.06em; }
+.telemetry-value strong { font:600 36px/1.1 system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+.telemetry-bars>span { border-radius:3px 3px 0 0; transition:height 400ms ease-out; }
+.telemetry-bars>span.latest { background:#9eaebf; }
+.telemetry-recent { border-radius:5px; }
+.settings-panel { border-radius:12px; border-color:#363d47; animation:deck-arrive 180ms ease-out; }
+.settings-panel nav { gap:4px; padding:8px 0; }
+.settings-panel nav button { border-radius:6px; }
+.settings-panel nav button[aria-current=page] { background:#303640; color:white; }
+.show-sessions { border-radius:8px; transition:background 160ms; }
+.show-sessions:hover { background:#272b31; }
+@media(hover:hover) {
+  .project-panel:hover { border-color:#515a66; transform:translateY(-2px); box-shadow:0 8px 24px #0002; }
+  .status-filters button:hover:not(.chosen) { background:#1c2026; color:#e2e2e6; }
+}
+@keyframes deck-arrive { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:767px) {
+  .deck-heading>p { display:none; }
+  .deck-heading h1 { font-size:24px; }
+  .status-filters { width:100%; }
+  .status-filters button { padding:8px 9px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+}
