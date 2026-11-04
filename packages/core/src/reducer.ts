@@ -120,6 +120,7 @@ export function reduceEnvelope(state: DeckState, env: Envelope): DeckState {
         };
       }
     }
+    run.children = Object.values(nextRuns).filter(child => child.parentId === runId).map(child => child.id);
   }
 
   if (!run) {

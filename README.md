@@ -67,7 +67,7 @@ package is linked.
 | `doctor` | Diagnose environment, adapters, DB size and reachability |
 | `probe [--source <agent>] [--tail N]` | Replay an agent's recent events in-process without persisting |
 | `setup claude [--dry-run]` | Install Claude Code hooks (diff + backup, reversible) |
-| `uninstall` | Restore `~/.claude/settings.json` |
+| `uninstall` | Remove agent-deck hooks, preserving current user settings |
 | `import` | Backfill up to 90 days of history into the local DB |
 | `run -- <cli> [args...]` | Wrap any CLI in a PTY so a generic adapter can observe it |
 | `pair` | Generate a pairing code and QR for the tablet |
@@ -133,3 +133,5 @@ Further reading: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md),
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+Model catalog caching, MCP setup, and validation boundaries: [integration compatibility](docs/integration-compatibility.md).

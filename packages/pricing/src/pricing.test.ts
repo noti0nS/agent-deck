@@ -10,8 +10,8 @@ describe('packages/pricing', () => {
 
   it('matches known model families and computes API-equivalent cost', () => {
     const sonnetRate = findModelRate('anthropic/claude-sonnet-4-20250514');
-    expect(sonnetRate.inputPer1M).toBe(3.0);
-    expect(sonnetRate.outputPer1M).toBe(15.0);
+    expect(sonnetRate!.inputPer1M).toBe(3.0);
+    expect(sonnetRate!.outputPer1M).toBe(15.0);
 
     const cost = estimateApiCostUsd('claude-sonnet-4', {
       tokensIn: 100_000,

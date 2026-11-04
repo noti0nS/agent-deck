@@ -150,11 +150,6 @@ export function setupClaudeHooks(options?: {
 
 export function uninstallClaudeHooks(options?: { settingsPath?: string }): { restored: boolean } {
   const settingsPath = options?.settingsPath ?? join(homedir(), '.claude', 'settings.json');
-  const canonicalBackup = `${settingsPath}.bak-agent-deck`;
-  if (existsSync(canonicalBackup)) {
-    copyFileSync(canonicalBackup, settingsPath);
-    return { restored: true };
-  }
   if (!existsSync(settingsPath)) {
     return { restored: false };
   }
@@ -377,6 +372,13 @@ export function normalizeClaudeTranscriptLine(
       }
     });
   } else if (type === 'user') {
+    const message = lineObj.message as { content?: Array<Record<string, unknown>> } | undefined;
+    const results = Array.isArray(message?.content) ? message.content.filter(b => b.type === 'tool_result') : [];
+    if (results.length) {
+      return results.map(b => ({ type: 'tool.completed', runId, ts, payload: {
+        stepId: String(b.tool_use_id || ''), label: 'tool', ok: typeof b.is_error === 'boolean' ? !b.is_error : undefined
+      } }));
+    }
     events.push({
       type: 'turn.started',
       runId,
@@ -419,7 +421,7 @@ export function normalizeClaudeTranscriptLine(
           cacheReadDelta: cacheRead,
           cacheWriteDelta: cacheWrite,
           costUsdDelta: estCost,
-          costSource: 'estimated',
+          costSource: estCost === undefined ? 'none' : 'estimated',
           precision: 'derived'
         }
       });
@@ -446,14 +448,14 @@ export function normalizeClaudeTranscriptLine(
             input.command || input.file_path || input.path || input.pattern || toolName
           ).slice(0, 120);
           events.push({
-            type: 'tool.completed',
+            type: 'tool.started',
             runId,
             ts,
             payload: {
               stepId: String(block.id || msgId),
               label: toolName.toLowerCase(),
               detail,
-              ok: true
+              tool: toolName
             }
           });
         }
@@ -504,7 +506,9 @@ export class ClaudeAdapter implements Adapter {
     if (existsSync(settingsPath)) {
       try {
         const text = readFileSync(settingsPath, 'utf8');
-        hooksInstalled = text.includes('agent-deck');
+        const settings = JSON.parse(text) as { hooks?: Record<string, ClaudeHookEntry[]> };
+        hooksInstalled = CLAUDE_HOOK_EVENTS.every(event => settings.hooks?.[event]?.some(entry =>
+          entry._source === 'agent-deck' && entry.hooks?.some(hook => hook.type === 'command' && !!hook.command)));
       } catch {
         hooksInstalled = false;
       }
@@ -527,7 +531,8 @@ export class ClaudeAdapter implements Adapter {
       source: 'claude',
       status: hasProjectsDir || hooksInstalled ? 'connected' : 'off',
       capabilities: caps,
-      lastSeenAt: Date.now()
+      configured: hooksInstalled,
+      transport: hooksInstalled ? 'udp' : 'poll'
     };
     return caps;
   }
@@ -552,11 +557,17 @@ export class ClaudeAdapter implements Adapter {
                 this.ctx?.emit(ev);
               }
               this.currentHealth.lastSeenAt = Date.now();
+              this.currentHealth.lastEventAt = this.currentHealth.lastSeenAt;
+              this.ctx?.reportHealth(this.currentHealth);
             } catch {
               // ignore malformed UDP packet
             }
           });
-          sock.on('error', () => {
+          sock.on('error', (error) => {
+            this.currentHealth.status = 'degraded';
+            this.currentHealth.capabilities.liveEvents = false;
+            this.currentHealth.lastError = error.message;
+            this.ctx?.reportHealth(this.currentHealth);
             try {
               sock.close();
             } catch {
@@ -642,6 +653,8 @@ export class ClaudeAdapter implements Adapter {
     if (processedLines > 0) {
       this.ctx.setSetting('claude_offsets', this.offsets);
     }
+    this.currentHealth.lastPolledAt = Date.now();
+    this.ctx.reportHealth(this.currentHealth);
     return processedLines;
   }
 
@@ -701,10 +714,12 @@ export class ClaudeAdapter implements Adapter {
         );
         for (const ev of events) {
           this.ctx.emit(ev);
+          this.currentHealth.lastEventAt = Math.max(this.currentHealth.lastEventAt ?? 0, ev.ts ?? mtimeMs);
         }
+        if (!events.length) this.currentHealth.ignoredEvents = (this.currentHealth.ignoredEvents ?? 0) + 1;
         count += 1;
       } catch {
-        // Resilient to corrupted JSONL lines (§12 R10, §13)
+        this.currentHealth.parseErrors = (this.currentHealth.parseErrors ?? 0) + 1;
       }
     }
 

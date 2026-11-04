@@ -21,7 +21,7 @@ import {
   type UsageTickPayload,
   type WireFrame
 } from '@agent-deck/core';
-import { PRICE_TABLE } from '@agent-deck/pricing';
+import { getPriceTable } from '@agent-deck/pricing';
 import { DeckPrefsSchema, PairRequestSchema, UsageQuerySchema } from '@agent-deck/protocol';
 import { defaultRedactor } from '@agent-deck/redact';
 import type { Adapter, EmitEventInput } from './adapter-spi.js';
@@ -106,13 +106,8 @@ export class CollectorEngine {
     this.tailscaleUrl = await getTailscaleMagicDnsUrl();
     for (const adapter of this.adapters.values()) {
       try {
-        const caps = await adapter.probe();
-        this.reportAdapterHealth({
-          source: adapter.source,
-          status: 'connected',
-          capabilities: caps,
-          lastSeenAt: Date.now()
-        });
+        await adapter.probe();
+        this.reportAdapterHealth(adapter.health());
         await adapter.start({
           emit: (ev) => this.ingest(ev),
           reportHealth: (h) => this.reportAdapterHealth(h),
@@ -388,8 +383,8 @@ export class CollectorEngine {
       adapters,
       config: {
         prefs: this.state.prefs,
-        pricingVersion: PRICE_TABLE.version,
-        pricingUpdatedAt: PRICE_TABLE.updatedAt,
+        pricingVersion: getPriceTable().version,
+        pricingUpdatedAt: getPriceTable().updatedAt,
         tailscaleUrl: this.tailscaleUrl
       }
     };

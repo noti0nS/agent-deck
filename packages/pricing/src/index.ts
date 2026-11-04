@@ -39,23 +39,20 @@ export const PRICE_TABLE: PriceTable = {
   ]
 };
 
-const DEFAULT_FALLBACK_RATE: ModelPriceRate = {
-  modelPattern: 'default',
-  inputPer1M: 2.5,
-  outputPer1M: 10.0,
-  reasoningPer1M: 10.0,
-  cacheReadPer1M: 0.25,
-  cacheWritePer1M: 3.0
-};
+let activePriceTable = PRICE_TABLE;
+export function setPriceTable(table: PriceTable): void { activePriceTable = table; }
+export function getPriceTable(): PriceTable { return activePriceTable; }
 
-export function findModelRate(model: string, table: PriceTable = PRICE_TABLE): ModelPriceRate {
+export function findModelRate(model: string, table: PriceTable = activePriceTable): ModelPriceRate | undefined {
   const lower = (model || '').toLowerCase();
+  const exact = table.rates.find(rate => rate.modelPattern.toLowerCase() === lower);
+  if (exact) return exact;
   for (const rate of table.rates) {
-    if (lower.includes(rate.modelPattern.toLowerCase())) {
+    if (table === PRICE_TABLE && lower.includes(rate.modelPattern.toLowerCase())) {
       return rate;
     }
   }
-  return DEFAULT_FALLBACK_RATE;
+  return undefined;
 }
 
 export interface TokenCountInput {
@@ -64,6 +61,8 @@ export interface TokenCountInput {
   tokensReasoning?: number;
   cacheRead?: number;
   cacheWrite?: number;
+  inputIncludesCache?: boolean;
+  outputIncludesReasoning?: boolean;
 }
 
 /**
@@ -73,11 +72,14 @@ export interface TokenCountInput {
 export function estimateApiCostUsd(
   model: string,
   tokens: TokenCountInput,
-  table: PriceTable = PRICE_TABLE
-): number {
+  table: PriceTable = activePriceTable
+): number | undefined {
   const rate = findModelRate(model, table);
-  const inCost = (Math.max(0, tokens.tokensIn) / 1_000_000) * rate.inputPer1M;
-  const outCost = (Math.max(0, tokens.tokensOut) / 1_000_000) * rate.outputPer1M;
+  if (!rate) return undefined;
+  const input = tokens.tokensIn - (tokens.inputIncludesCache ? (tokens.cacheRead ?? 0) + (tokens.cacheWrite ?? 0) : 0);
+  const output = tokens.tokensOut - (tokens.outputIncludesReasoning ? tokens.tokensReasoning ?? 0 : 0);
+  const inCost = (Math.max(0, input) / 1_000_000) * rate.inputPer1M;
+  const outCost = (Math.max(0, output) / 1_000_000) * rate.outputPer1M;
   const reasonCost =
     (Math.max(0, tokens.tokensReasoning ?? 0) / 1_000_000) * (rate.reasoningPer1M ?? rate.outputPer1M);
   const cacheReadCost =

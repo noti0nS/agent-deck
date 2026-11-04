@@ -23,6 +23,8 @@ import {
   renderAsciiQr
 } from './pair.js';
 import { CollectorStore } from './store.js';
+import { ModelCatalogSync } from './model-catalog.js';
+import { runMcp } from './mcp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -37,6 +39,7 @@ export function getDefaultWebBuildDir(): string {
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   const cmd = argv[0] || 'status';
   const args = argv.slice(1);
+  if (cmd === 'mcp') { await runMcp(); return 0; }
 
   if (cmd === 'probe') {
     const srcIdx = args.indexOf('--source');
@@ -159,7 +162,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
   if (cmd === 'uninstall') {
     const res = uninstallClaudeHooks();
-    console.log(res.restored ? 'Restored ~/.claude/settings.json.' : 'No Claude hook changes found.');
+    console.log(res.restored ? 'Removed agent-deck hooks from ~/.claude/settings.json.' : 'No Claude hook changes found.');
     return 0;
   }
 
@@ -219,6 +222,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const port = Number(process.env.AGENT_DECK_PORT || 4100);
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
+    const modelCatalog = new ModelCatalogSync(store);
+    modelCatalog.start();
     const staticDir = getDefaultWebBuildDir();
     const engine = new CollectorEngine({
       store,
@@ -240,6 +245,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const app = await buildHttpServer(engine, {
       staticDir: existsSync(staticDir) ? staticDir : undefined
     });
+    app.addHook('onClose', async () => { await modelCatalog.stop(); });
 
     // Bind loopback (127.0.0.1) or Tailscale IP — never 0.0.0.0 (P6, §9, §10.3)
     const host = process.env.AGENT_DECK_HOST || '127.0.0.1';
@@ -261,7 +267,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     return 0;
   }
 
-  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|uninstall|pair|run|import>`);
+  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|uninstall|pair|run|import|mcp>`);
   return 0;
 }
 

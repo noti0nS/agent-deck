@@ -39,9 +39,11 @@ describe('CodexAdapter & Rollout Fixture Replay', () => {
       tokensOut: 2_000,
       tokensReasoning: 500,
       cacheRead: 10_000,
-      cacheWrite: 0
+      cacheWrite: 0,
+      inputIncludesCache: true,
+      outputIncludesReasoning: true
     });
-    expect(run.usage.costUsd).toBeCloseTo(expectedCost, 5);
+    expect(run.usage.costUsd).toBeCloseTo(expectedCost!, 5);
     expect(run.status).toBe('idle');
 
     store.close();

@@ -458,7 +458,7 @@ export class OpenCodeAdapter implements Adapter {
           cacheReadTotal: cacheRead,
           cacheWriteTotal: cacheWrite,
           costUsdTotal: costUsd,
-          costSource: hasVendorCost ? 'tool' : 'estimated',
+          costSource: hasVendorCost ? 'tool' : costUsd === undefined ? 'none' : 'estimated',
           precision: hasVendorCost ? 'exact' : 'derived',
           activeMsTotal: Math.max(0, updatedAt - startedAt)
         }
@@ -575,10 +575,10 @@ export class OpenCodeAdapter implements Adapter {
         if (!res.ok || !res.body) {
           throw new Error(`SSE HTTP ${res.status}`);
         }
-        backoffMs = 1000;
         this.currentHealth.status = 'connected';
         this.currentHealth.lastSeenAt = Date.now();
         this.ctx?.reportHealth(this.currentHealth);
+        this.reconcileFromDb(15, 'polled');
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8', { fatal: false });
@@ -596,6 +596,7 @@ export class OpenCodeAdapter implements Adapter {
               if (!jsonStr) continue;
               try {
                 const raw = JSON.parse(jsonStr) as Record<string, unknown>;
+                backoffMs = 1000;
                 const normalized = normalizeOpenCodeSseEvent(raw, Date.now());
                 for (const ev of normalized) {
                   this.ctx?.emit(ev);
@@ -606,12 +607,13 @@ export class OpenCodeAdapter implements Adapter {
             }
           }
         }
+        if (!this.stopped) throw new Error('OpenCode event stream closed');
       } catch (err) {
         if (this.stopped) break;
         this.currentHealth.status = 'degraded';
         this.currentHealth.lastError = err instanceof Error ? err.message : String(err);
         this.ctx?.reportHealth(this.currentHealth);
-        await new Promise((r) => setTimeout(r, backoffMs));
+        await new Promise((r) => setTimeout(r, backoffMs + Math.random() * backoffMs * 0.25));
         backoffMs = Math.min(30_000, backoffMs * 2);
       }
     }

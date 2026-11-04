@@ -16,6 +16,18 @@ import type { Adapter, AdapterContext, EmitEventInput } from '../adapter-spi.js'
 
 const execFileAsync = promisify(execFile);
 
+export function toolOutcome(output: unknown): boolean | undefined {
+  if (typeof output === 'string') {
+    try { return toolOutcome(JSON.parse(output)); } catch { return undefined; }
+  }
+  if (!output || typeof output !== 'object') return undefined;
+  const result = output as Record<string, unknown>;
+  if (typeof result.exit_code === 'number') return result.exit_code === 0;
+  if (typeof result.isError === 'boolean') return !result.isError;
+  if (typeof result.ok === 'boolean') return result.ok;
+  return undefined;
+}
+
 export interface CodexAdapterOptions {
   sessionsDir?: string;
   pollIntervalMs?: number;
@@ -33,7 +45,7 @@ export function normalizeCodexRolloutLine(
   const payload = (lineObj.payload ?? {}) as Record<string, unknown>;
   const ts = lineObj.timestamp ? new Date(String(lineObj.timestamp)).getTime() || defaultTs : defaultTs;
   let model = currentModel;
-  let nativeId = String(payload.id || payload.thread_id || payload.session_id || fallbackId);
+  let nativeId = String(payload.thread_id || payload.session_id || fallbackId);
   if (!nativeId) nativeId = fallbackId;
   const runId = `codex:${nativeId}`;
 
@@ -142,7 +154,7 @@ export function normalizeCodexRolloutLine(
         runId,
         ts,
         payload: {
-          stepId: String(payload.id || payload.call_id || `${nativeId}:${lineIndex}`),
+          stepId: String(payload.call_id || payload.id || `${nativeId}:${lineIndex}`),
           label: toolName,
           detail: argsStr.slice(0, 120) || toolName,
           tool: toolName
@@ -156,7 +168,7 @@ export function normalizeCodexRolloutLine(
         payload: {
           stepId: String(payload.call_id || `${nativeId}:${lineIndex}`),
           label: 'tool',
-          ok: true
+          ok: toolOutcome(payload.output)
         }
       });
     } else if (itemType === 'message' && payload.role === 'assistant') {
@@ -192,7 +204,9 @@ export function normalizeCodexRolloutLine(
       tokensOut,
       tokensReasoning,
       cacheRead,
-      cacheWrite
+      cacheWrite,
+      inputIncludesCache: true,
+      outputIncludesReasoning: true
     });
 
     events.push({
@@ -207,7 +221,7 @@ export function normalizeCodexRolloutLine(
         cacheReadDelta: cacheRead,
         cacheWriteDelta: cacheWrite,
         costUsdDelta: estCost,
-        costSource: 'estimated',
+        costSource: estCost === undefined ? 'none' : 'estimated',
         precision: 'derived'
       }
     });
@@ -222,7 +236,7 @@ export class CodexAdapter implements Adapter {
   private readonly pollIntervalMs: number;
   private ctx?: AdapterContext;
   private pollTimer: NodeJS.Timeout | null = null;
-  private offsets: Record<string, { offset: number; model: string; nativeId: string }> = {};
+  private offsets: Record<string, { offset: number; model: string; nativeId: string; identity?: string; line?: number }> = {};
   private currentHealth: AdapterHealth;
 
   constructor(options: CodexAdapterOptions = {}) {
@@ -260,7 +274,7 @@ export class CodexAdapter implements Adapter {
     if (agentsOracleOk) notes.push('cli=codex available');
 
     const caps: Capabilities = {
-      liveEvents: hasDaemonDir && agentsOracleOk,
+      liveEvents: false,
       usagePrecision: hasSessionsDir ? 'derived' : 'none',
       attention: hasSessionsDir,
       subagents: true,
@@ -269,9 +283,10 @@ export class CodexAdapter implements Adapter {
 
     this.currentHealth = {
       source: 'codex',
-      status: hasSessionsDir || agentsOracleOk ? 'connected' : 'off',
+      status: hasSessionsDir ? 'connected' : 'off',
       capabilities: caps,
-      lastSeenAt: Date.now()
+      configured: hasSessionsDir,
+      transport: 'poll'
     };
 
     return caps;
@@ -279,6 +294,7 @@ export class CodexAdapter implements Adapter {
 
   public async start(ctx: AdapterContext): Promise<void> {
     this.ctx = ctx;
+    this.offsets = ctx.getSetting<typeof this.offsets>('codex_offsets') ?? {};
     await this.probe();
     ctx.reportHealth(this.currentHealth);
 
@@ -330,7 +346,8 @@ export class CodexAdapter implements Adapter {
     for (const f of files.slice(0, maxFiles).reverse()) {
       totalLines += this.tailRolloutFile(f.path, f.mtimeMs);
     }
-    this.currentHealth.lastSeenAt = Date.now();
+    this.currentHealth.lastPolledAt = Date.now();
+    this.ctx.reportHealth(this.currentHealth);
     return totalLines;
   }
 
@@ -344,10 +361,14 @@ export class CodexAdapter implements Adapter {
     }
 
     const baseName = basename(filePath).replace(/\.jsonl$/, '');
-    const state = this.offsets[filePath] ?? {
+    const identity = `${st.dev}:${st.ino}:${st.birthtimeMs}`;
+    const previous = this.offsets[filePath];
+    const state = previous && previous.identity === identity && st.size >= previous.offset ? previous : {
       offset: 0,
       model: 'gpt-5',
-      nativeId: baseName
+      nativeId: baseName,
+      identity,
+      line: 0
     };
     const startOffset = st.size < state.offset ? 0 : state.offset;
     if (st.size <= startOffset) return 0;
@@ -378,7 +399,7 @@ export class CodexAdapter implements Adapter {
         const res = normalizeCodexRolloutLine(
           state.nativeId,
           obj,
-          i,
+          (state.line ?? 0) + i,
           state.model,
           mtimeMs
         );
@@ -386,14 +407,19 @@ export class CodexAdapter implements Adapter {
         state.nativeId = res.nativeId;
         for (const ev of res.events) {
           this.ctx.emit(ev);
+          this.currentHealth.lastEventAt = Math.max(this.currentHealth.lastEventAt ?? 0, ev.ts ?? mtimeMs);
+          this.currentHealth.lastSeenAt = this.currentHealth.lastEventAt;
         }
+        if (!res.events.length) this.currentHealth.ignoredEvents = (this.currentHealth.ignoredEvents ?? 0) + 1;
         count += 1;
       } catch {
-        // Resilient to malformed JSONL lines
+        this.currentHealth.parseErrors = (this.currentHealth.parseErrors ?? 0) + 1;
       }
     }
 
+    state.line = (state.line ?? 0) + lines.length;
     this.offsets[filePath] = state;
+    this.ctx.setSetting('codex_offsets', this.offsets);
     return count;
   }
 }

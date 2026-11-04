@@ -195,6 +195,7 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
 
     case 'tool.started': {
       const p = env.payload as ToolStartedPayload;
+      if (p.stepId && (run.activeSteps?.some(s => s.id === p.stepId) || run.recentSteps?.some(s => s.id === p.stepId))) break;
       const step = {
         id: p.stepId ?? `${env.seq}`,
         label: p.label,
@@ -203,6 +204,7 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
         startedAt: env.ts
       };
       run.currentStep = step;
+      if (p.stepId) run.activeSteps = [...(run.activeSteps ?? []), step].slice(-256);
       run.usage.toolCalls += 1;
       if (from === 'waiting') {
         // Activity resumed -> clear sticky waiting
@@ -217,16 +219,21 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
 
     case 'tool.completed': {
       const p = env.payload as ToolCompletedPayload;
+      const existing = p.stepId ? run.recentSteps?.find(s => s.id === p.stepId) : undefined;
+      if (existing?.endedAt !== undefined) break;
+      const started = p.stepId ? run.activeSteps?.find(s => s.id === p.stepId) : run.currentStep;
       const completedStep = {
         id: p.stepId ?? run.currentStep?.id ?? `${env.seq}`,
-        label: p.label || run.currentStep?.label || 'tool',
-        detail: p.detail ?? run.currentStep?.detail ?? '',
-        tool: run.currentStep?.tool ?? p.label,
-        startedAt: run.currentStep?.startedAt ?? Math.max(0, env.ts - (p.durationMs ?? 0)),
+        label: started?.label || p.label || 'tool',
+        detail: p.detail ?? started?.detail ?? '',
+        tool: started?.tool ?? p.label,
+        startedAt: started?.startedAt ?? Math.max(0, env.ts - (p.durationMs ?? 0)),
         endedAt: env.ts,
         ok: p.ok
       };
       run.recentSteps = [completedStep, ...(run.recentSteps ?? [])].slice(0, 50);
+      run.activeSteps = (run.activeSteps ?? []).filter(s => s.id !== completedStep.id);
+      run.currentStep = run.activeSteps.at(-1);
       if (p.durationMs && p.durationMs > 0) {
         run.usage.activeMs += p.durationMs;
       }
@@ -235,7 +242,7 @@ export function applyStatusEvent(prev: AgentRun, env: Envelope): StatusTransitio
         reason = 'tool.completed';
       }
       run.lastActivityAt = Math.max(run.lastActivityAt, env.ts);
-      pushActivityTick(run, p.ok ? 'tool' : 'error');
+      pushActivityTick(run, p.ok === false ? 'error' : 'tool');
       break;
     }
 

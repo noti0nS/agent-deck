@@ -93,6 +93,7 @@ export interface AgentRun {
   doneAt?: number;
   endedAt?: number;
   currentStep?: Step;         // one-line "now"
+  activeSteps?: Step[];
   todos: Todo[];
   usage: Usage;
   attention?: Attention;      // display-only "needs you" indicator
@@ -120,6 +121,12 @@ export interface AdapterHealth {
   lastSeenAt?: number;
   lastError?: string;
   lagMs?: number;
+  transport?: 'poll' | 'udp' | 'sse';
+  configured?: boolean;
+  lastPolledAt?: number;
+  lastEventAt?: number;
+  parseErrors?: number;
+  ignoredEvents?: number;
 }
 
 export type EventType =
@@ -204,7 +211,7 @@ export interface ToolCompletedPayload {
   label: string;
   detail?: string;
   durationMs?: number;
-  ok: boolean;
+  ok?: boolean;
 }
 
 export interface MessageCompletedPayload {

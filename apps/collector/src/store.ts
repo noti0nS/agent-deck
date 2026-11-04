@@ -291,6 +291,7 @@ export class CollectorStore {
       filesChanged: sanitizedRun.filesChanged ?? [],
       recentMessages: sanitizedRun.recentMessages ?? [],
       recentSteps: sanitizedRun.recentSteps ?? [],
+      activeSteps: sanitizedRun.activeSteps ?? [],
       activityTimeline: sanitizedRun.activityTimeline ?? []
     };
 
@@ -401,6 +402,7 @@ export class CollectorStore {
           ? (meta.recentMessages as AgentRun['recentMessages'])
           : [],
         recentSteps: Array.isArray(meta.recentSteps) ? (meta.recentSteps as AgentRun['recentSteps']) : [],
+        activeSteps: Array.isArray(meta.activeSteps) ? (meta.activeSteps as Step[]) : [],
         activityTimeline: Array.isArray(meta.activityTimeline)
           ? (meta.activityTimeline as AgentRun['activityTimeline'])
           : new Array(60).fill('none')
