@@ -45,7 +45,7 @@
     <div>
       <div class="flex items-center gap-2 mb-1">
         <span class="font-mono-tabular text-[13px] font-bold text-[#6BA6FF]">&gt;_</span>
-        <span class="chrome-label !text-[#ECEDF2]">OPENCODE // AGENT DECK CONFIGURATION</span>
+        <span class="chrome-label !text-[#ECEDF2]">AGENT DECK / SETTINGS</span>
       </div>
       <h1 class="text-[19px] font-semibold tracking-tight text-[#ECEDF2] sm:text-[22px]">Agent Deck Settings</h1>
       <p class="text-[13px] text-[#8B93A6] sm:text-[14px]">

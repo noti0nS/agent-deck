@@ -1,0 +1,240 @@
+{
+  "createTime": "2026-11-04T14:05:09.29469Z",
+  "designTheme": {
+    "bodyFont": "GEIST",
+    "bodyFontFamily": "Geist",
+    "colorMode": "DARK",
+    "colorVariant": "FIDELITY",
+    "customColor": "#e6e8eb",
+    "designMd": "---\nname: Instrument Console\ncolors:\n  surface: '#111317'\n  surface-dim: '#111317'\n  surface-bright: '#37393d'\n  surface-container-lowest: '#0c0e11'\n  surface-container-low: '#1a1c1f'\n  surface-container: '#1e2023'\n  surface-container-high: '#282a2d'\n  surface-container-highest: '#333538'\n  on-surface: '#e2e2e6'\n  on-surface-variant: '#c4c7c9'\n  inverse-surface: '#e2e2e6'\n  inverse-on-surface: '#2f3034'\n  outline: '#8e9194'\n  outline-variant: '#44474a'\n  surface-tint: '#c4c7ca'\n  primary: '#ffffff'\n  on-primary: '#2d3133'\n  primary-container: '#e0e3e6'\n  on-primary-container: '#626567'\n  inverse-primary: '#5c5f61'\n  secondary: '#c0c7d5'\n  on-secondary: '#2a313b'\n  secondary-container: '#424955'\n  on-secondary-container: '#b2b9c6'\n  tertiary: '#ffffff'\n  on-tertiary: '#2c313a'\n  tertiary-container: '#dee2ef'\n  on-tertiary-container: '#60646f'\n  error: '#ffb4ab'\n  on-error: '#690005'\n  error-container: '#93000a'\n  on-error-container: '#ffdad6'\n  primary-fixed: '#e0e3e6'\n  primary-fixed-dim: '#c4c7ca'\n  on-primary-fixed: '#191c1e'\n  on-primary-fixed-variant: '#44474a'\n  secondary-fixed: '#dce3f1'\n  secondary-fixed-dim: '#c0c7d5'\n  on-secondary-fixed: '#151c26'\n  on-secondary-fixed-variant: '#404752'\n  tertiary-fixed: '#dee2ef'\n  tertiary-fixed-dim: '#c2c6d2'\n  on-tertiary-fixed: '#171c24'\n  on-tertiary-fixed-variant: '#424751'\n  background: '#111317'\n  on-background: '#e2e2e6'\n  surface-variant: '#333538'\ntypography:\n  display:\n    fontFamily: Newsreader\n    fontSize: 2.5rem\n    fontWeight: '400'\n    lineHeight: 3rem\n    letterSpacing: -0.02em\n  display-mobile:\n    fontFamily: Newsreader\n    fontSize: 1.75rem\n    fontWeight: '400'\n    lineHeight: 2.25rem\n    letterSpacing: -0.01em\n  headline-lg:\n    fontFamily: Newsreader\n    fontSize: 1.75rem\n    fontWeight: '400'\n    lineHeight: 2.25rem\n    letterSpacing: -0.015em\n  headline-lg-mobile:\n    fontFamily: Newsreader\n    fontSize: 1.375rem\n    fontWeight: '400'\n    lineHeight: 1.75rem\n    letterSpacing: -0.01em\n  headline-sm:\n    fontFamily: Geist\n    fontSize: 1.125rem\n    fontWeight: '600'\n    lineHeight: 1.5rem\n    letterSpacing: -0.01em\n  body-lg:\n    fontFamily: Geist\n    fontSize: 1rem\n    fontWeight: '400'\n    lineHeight: 1.5rem\n    letterSpacing: 0em\n  body-sm:\n    fontFamily: Geist\n    fontSize: 0.875rem\n    fontWeight: '400'\n    lineHeight: 1.25rem\n    letterSpacing: 0.005em\n  label-code:\n    fontFamily: JetBrains Mono\n    fontSize: 0.8125rem\n    fontWeight: '400'\n    lineHeight: 1.25rem\n    letterSpacing: -0.01em\n  label-meta:\n    fontFamily: JetBrains Mono\n    fontSize: 0.6875rem\n    fontWeight: '500'\n    lineHeight: 0.875rem\n    letterSpacing: 0.05em\n  metric-large:\n    fontFamily: JetBrains Mono\n    fontSize: 2rem\n    fontWeight: '500'\n    lineHeight: 2.25rem\n    letterSpacing: -0.03em\nrounded:\n  sm: 0.125rem\n  DEFAULT: 0.25rem\n  md: 0.375rem\n  lg: 0.5rem\n  xl: 0.75rem\n  full: 9999px\nspacing:\n  gutter: 1rem\n  gutter-tablet: 0.75rem\n  gutter-desktop: 1.25rem\n  margin: 1rem\n  margin-tablet: 1.5rem\n  margin-desktop: 2rem\n  space-xs: 0.25rem\n  space-sm: 0.5rem\n  space-md: 1rem\n  space-lg: 1.5rem\n  space-xl: 2.5rem\n---\n\n## Brand & Style\n\nThis design system establishes an observe-only, glanceable operating surface engineered for peripheral monitoring. Positioned on an auxiliary display, mounted tablet, or desk stand, the interface functions as a dedicated digital gauge rather than an interactive IDE. The emotional posture is disciplined, quiet, and reliable: zero visual clamor, zero artificial neon illumination, and absolute semantic integrity.\n\nDrawing inspiration from mid-century Swiss industrial instruments (Braun, Dieter Rams, metric flight instrumentation) and austere editorial typography, the system balances dense structural telemetry with breathing room. High contrast is reserved strictly for actionable state shifts. Every pixel serves cognitive triage—allowing an engineer deep in thought to confirm fleet health or spot blocking permissions with an unfocused peripheral glance at arm's length.\n\n## Colors\n\nThe palette employs rigorous chromatic restraint. Color is never decorative; it is solely an informational vector indicating lifecycle state and attention priority.\n\n- **Background Canvas (`#0D0F12`)**: Deep void obsidian, suppressing backlighting glare on secondary displays.\n- **Surface Elevation 1 (`#161A20`)**: Subtly lifted dark graphite for structural lanes and panel divisions.\n- **Surface Elevation 2 (`#1B2028`)**: Accentuated surface for focused agent inspection or elevated status blocks.\n- **Structural Outlines (`#1F242D`)**: Hairline borders providing tactile separation without heavy visual mass.\n- **Primary Text (`#E6E8EB`)**: Warm, desaturated ivory designed to eliminate harsh eye strain caused by pure white against black.\n- **Secondary / Meta Text (`#8E95A2`)**: Subdued industrial slate for timestamps, parameters, labels, and baseline metrics.\n- **Active State (`#10B981`)**: Calm, balanced emerald designating autonomous agent execution, active token streaming, or ongoing test runs.\n- **Pending Attention State (`#F59E0B`)**: Dense warm amber strictly reserved for blocking states: tool approvals, security escalation prompts, or required user input.\n- **Fault State (`#EF4444`)**: Deep vermilion indicating unhandled runtime exceptions, failed assertions, or exited processes.\n- **Idle / Settled State (`#4B5563`)**: Cool graphite for quiescent, paused, or cleanly exited tasks.\n\n## Typography\n\nThe typographic hierarchy juxtaposes classical Swiss editorial authority with ruthless machine-readable telemetry.\n\n- **Newsreader** delivers an intentional editorial cadence for console names, agent identities, and high-level milestones. It strips away the sterile developer tool cliché, framing automated work as structured literature and curated processes.\n- **Geist** manages interface scaffolding, summaries, prose status descriptions, and conversational reasoning steps with geometric precision and neutral legibility at distance.\n- **JetBrains Mono** powers terminal outputs, execution arguments, token meters, diff paths, git hashes, and timestamps. Always set with tabular lining numerals (`tnum`) to eliminate spatial jitter during active output streaming.\n\n## Layout & Spacing\n\nLayout geometry follows a precision-bracketed modular grid engineered for glanceability. Content never flexes into arbitrary floating states; it is snapped to strict structural coordinates.\n\n- **Primary Canvas**: A fluid column grid (12 columns on desktop/tablet landscape, 4 columns on portrait mobile) structured by precise 1px partition dividers.\n- **Arm's Length Ergonomics**: Margins are widened on auxiliary widescreen and tablet formats (`1.5rem` to `2rem`) to frame status registers away from physical display bezels.\n- **Density Tiers**: Component internals use disciplined compact spacing (`space-xs` and `space-sm`) for terminal and parameter rows, paired with generous section gaps (`space-lg` and `space-xl`) between distinct autonomous agent tracks.\n- **Multi-Agent Tiling**: When multiple agents run concurrently, the canvas divides into independent vertical telemetry columns. Column widths preserve minimum legible line lengths for code inspection while keeping status indicators horizontally aligned.\n\n## Elevation & Depth\n\nThis system avoids floating volumetric shadows, colored glows, and blurred transparency layers. Depth is constructed purely through flat tonal layering and precise hairline borders.\n\n- **Base Field**: `#0D0F12` represents the silent console floor.\n- **Module Enclosures**: `#161A20` defines bounded agent panes, bounded by a uniform `1px solid #1F242D` rule.\n- **Sub-panels & Code Registers**: `#12151B` recessed backgrounds communicate passive telemetry chambers.\n- **Blocking Overlays**: In the exceptional event of an interactive confirmation modal, an opaque backdrop scrim (`#0D0F12` at 85% opacity) isolates the modal panel. The panel itself uses a dual stroke: an inner hairline of `#2A323D` enclosed by a crisp `#1F242D` outer boundary. Shadows are completely omitted in favor of structural tonal contrast.\n\n## Shapes\n\nShapes communicate precision toolcraft. Curvature is kept minimal (`0.25rem` baseline) to maintain crisp, architectural edges evocative of hardware metering decks.\n\n- **Panels & Dividers**: `4px` (`0.25rem`) corner radius for modular containers.\n- **Pills & Metas**: `2px` to `4px` corner radius for status tags and code segments. Full pill shapes are forbidden, as they undermine the technical rigor of the interface.\n- **Indicators**: State telemetry lights are exact square pips or micro-rectangles, accentuating the mechanical gauge language.\n\n## Components\n\n### Status Rails & Telemetry Gauges\n- **Agent Monitor Enclosure**: Structured panel featuring a top header row with the agent name in Newsreader, followed by monospace branch/commit metadata, uptime timers, and active step indices.\n- **Status Pip**: A compact 6x6px mechanical square indicator. Emerald (`#10B981`) for working states with a subtle discrete step blink (no glowing trails); Amber (`#F59E0B`) for approval halts; Vermilion (`#EF4444`) for runtime failures; Cool Graphite (`#4B5563`) for dormant threads.\n\n### Telemetry Stream & Terminal View\n- Bounded viewport with a sunken `#12151B` background and `#1F242D` perimeter line.\n- Text rendered exclusively in `label-code`, using `#8E95A2` for routine command logging, `#E6E8EB` for active stdout, and deliberate semantic highlighting for warnings and errors.\n- Tabular numeric execution counters aligned strictly along the right edge.\n\n### Action Confirmation Brackets (Observe-Only Overrides)\n- When user attention is required (e.g., shell access authorization), the affected agent card border transitions entirely to `#F59E0B`.\n- Action blocks use flat rectangular containers with high-contrast mono labels (`[ AWAITING INPUT: Y / N ]`). Secondary buttons use `#1F242D` backgrounds with `#E6E8EB` text; destructive abort buttons use muted vermilion outlines.\n\n### Chips & Metadata Tags\n- Minimalist rectangular metadata tags with 2px borders, `#161A20` background, and `label-meta` typography. Tags display execution parameters, context window consumption, and model signatures (e.g., `CLAUDE-3-7-SONNET`, `OPENCODE-V1`).\n- No icon clutter; metadata uses clear textual keys separated by mid-dots or structural pipes.\n\n### Lists & Activity Feeds\n- Structured as dense ledger rows separated by hairline `#1F242D` borders.\n- Monospace timestamps are left-aligned, followed by event descriptions and duration telemetry right-aligned. Hover states are passive, indicated only by a subtle background shift to `#1B2028`.",
+    "font": "NEWSREADER",
+    "headlineFont": "NEWSREADER",
+    "headlineFontFamily": "Newsreader",
+    "labelFont": "JETBRAINS_MONO",
+    "labelFontFamily": "JetBrains Mono",
+    "namedColors": {
+      "background": "#111317",
+      "error": "#ffb4ab",
+      "error_container": "#93000a",
+      "inverse_on_surface": "#2f3034",
+      "inverse_primary": "#5c5f61",
+      "inverse_surface": "#e2e2e6",
+      "on_background": "#e2e2e6",
+      "on_error": "#690005",
+      "on_error_container": "#ffdad6",
+      "on_primary": "#2d3133",
+      "on_primary_container": "#626567",
+      "on_primary_fixed": "#191c1e",
+      "on_primary_fixed_variant": "#44474a",
+      "on_secondary": "#2a313b",
+      "on_secondary_container": "#b2b9c6",
+      "on_secondary_fixed": "#151c26",
+      "on_secondary_fixed_variant": "#404752",
+      "on_surface": "#e2e2e6",
+      "on_surface_variant": "#c4c7c9",
+      "on_tertiary": "#2c313a",
+      "on_tertiary_container": "#60646f",
+      "on_tertiary_fixed": "#171c24",
+      "on_tertiary_fixed_variant": "#424751",
+      "outline": "#8e9194",
+      "outline_variant": "#44474a",
+      "primary": "#ffffff",
+      "primary_container": "#e0e3e6",
+      "primary_fixed": "#e0e3e6",
+      "primary_fixed_dim": "#c4c7ca",
+      "secondary": "#c0c7d5",
+      "secondary_container": "#424955",
+      "secondary_fixed": "#dce3f1",
+      "secondary_fixed_dim": "#c0c7d5",
+      "surface": "#111317",
+      "surface_bright": "#37393d",
+      "surface_container": "#1e2023",
+      "surface_container_high": "#282a2d",
+      "surface_container_highest": "#333538",
+      "surface_container_low": "#1a1c1f",
+      "surface_container_lowest": "#0c0e11",
+      "surface_dim": "#111317",
+      "surface_tint": "#c4c7ca",
+      "surface_variant": "#333538",
+      "tertiary": "#ffffff",
+      "tertiary_container": "#dee2ef",
+      "tertiary_fixed": "#dee2ef",
+      "tertiary_fixed_dim": "#c2c6d2"
+    },
+    "overrideNeutralColor": "#0d0f12",
+    "overridePrimaryColor": "#e6e8eb",
+    "overrideSecondaryColor": "#8e95a2",
+    "overrideTertiaryColor": "#1f242d",
+    "roundness": "ROUND_FOUR",
+    "spacing": {
+      "gutter": "1rem",
+      "gutter-desktop": "1.25rem",
+      "gutter-tablet": "0.75rem",
+      "margin": "1rem",
+      "margin-desktop": "2rem",
+      "margin-tablet": "1.5rem",
+      "space-lg": "1.5rem",
+      "space-md": "1rem",
+      "space-sm": "0.5rem",
+      "space-xl": "2.5rem",
+      "space-xs": "0.25rem"
+    },
+    "spacingScale": 2,
+    "typography": {
+      "body-lg": {
+        "fontFamily": "Geist",
+        "fontSize": "1rem",
+        "fontWeight": "400",
+        "letterSpacing": "0em",
+        "lineHeight": "1.5rem"
+      },
+      "body-sm": {
+        "fontFamily": "Geist",
+        "fontSize": "0.875rem",
+        "fontWeight": "400",
+        "letterSpacing": "0.005em",
+        "lineHeight": "1.25rem"
+      },
+      "display": {
+        "fontFamily": "Newsreader",
+        "fontSize": "2.5rem",
+        "fontWeight": "400",
+        "letterSpacing": "-0.02em",
+        "lineHeight": "3rem"
+      },
+      "display-mobile": {
+        "fontFamily": "Newsreader",
+        "fontSize": "1.75rem",
+        "fontWeight": "400",
+        "letterSpacing": "-0.01em",
+        "lineHeight": "2.25rem"
+      },
+      "headline-lg": {
+        "fontFamily": "Newsreader",
+        "fontSize": "1.75rem",
+        "fontWeight": "400",
+        "letterSpacing": "-0.015em",
+        "lineHeight": "2.25rem"
+      },
+      "headline-lg-mobile": {
+        "fontFamily": "Newsreader",
+        "fontSize": "1.375rem",
+        "fontWeight": "400",
+        "letterSpacing": "-0.01em",
+        "lineHeight": "1.75rem"
+      },
+      "headline-sm": {
+        "fontFamily": "Geist",
+        "fontSize": "1.125rem",
+        "fontWeight": "600",
+        "letterSpacing": "-0.01em",
+        "lineHeight": "1.5rem"
+      },
+      "label-code": {
+        "fontFamily": "JetBrains Mono",
+        "fontSize": "0.8125rem",
+        "fontWeight": "400",
+        "letterSpacing": "-0.01em",
+        "lineHeight": "1.25rem"
+      },
+      "label-meta": {
+        "fontFamily": "JetBrains Mono",
+        "fontSize": "0.6875rem",
+        "fontWeight": "500",
+        "letterSpacing": "0.05em",
+        "lineHeight": "0.875rem"
+      },
+      "metric-large": {
+        "fontFamily": "JetBrains Mono",
+        "fontSize": "2rem",
+        "fontWeight": "500",
+        "letterSpacing": "-0.03em",
+        "lineHeight": "2.25rem"
+      }
+    }
+  },
+  "deviceType": "MOBILE",
+  "metadata": {
+    "userRole": "OWNER"
+  },
+  "name": "projects/7661839418307341010",
+  "origin": "STITCH",
+  "projectType": "TEXT_TO_UI_PRO",
+  "screenInstances": [
+    {
+      "height": 1024,
+      "id": "2aaa55e97e4c4ac79e083f4719fa151f",
+      "label": "Avionics Tablet Glass Cockpit",
+      "sourceScreen": "projects/7661839418307341010/screens/2aaa55e97e4c4ac79e083f4719fa151f",
+      "width": 1280,
+      "x": 392,
+      "y": 3627
+    },
+    {
+      "height": 1024,
+      "id": "2e2c8a4c42094912ac89ad8f2116f6d5",
+      "isResized": true,
+      "label": "Agent Deck Clean Tablet Dashboard",
+      "sourceScreen": "projects/7661839418307341010/screens/2e2c8a4c42094912ac89ad8f2116f6d5",
+      "width": 768,
+      "x": 3080,
+      "y": 3627
+    },
+    {
+      "height": 1045,
+      "id": "7f3c53425d5745f7a9473e7049270b5b",
+      "label": "Active Deck Overview",
+      "sourceScreen": "projects/7661839418307341010/screens/7f3c53425d5745f7a9473e7049270b5b",
+      "width": 390,
+      "y": 2095
+    },
+    {
+      "height": 1242,
+      "id": "8072c647005f498d8115f7838279b188",
+      "label": "Project Matrix Console",
+      "sourceScreen": "projects/7661839418307341010/screens/8072c647005f498d8115f7838279b188",
+      "width": 390,
+      "x": -61,
+      "y": 3627
+    },
+    {
+      "height": 540,
+      "id": "assets_547f7d028e424b80bf3cb7f3686b96eb",
+      "sourceAsset": "assets/547f7d028e424b80bf3cb7f3686b96eb",
+      "type": "DESIGN_SYSTEM_INSTANCE",
+      "width": 960
+    },
+    {
+      "height": 1839,
+      "id": "e2e1e099003d45839cfe6443fb3f6030",
+      "label": "Active Deck Overview",
+      "sourceScreen": "projects/7661839418307341010/screens/e2e1e099003d45839cfe6443fb3f6030",
+      "width": 390,
+      "x": 1478
+    },
+    {
+      "height": 1024,
+      "id": "e4810ee75ef64e1abe8721a7a3664e7f",
+      "label": "Agent Deck Tablet Overview",
+      "sourceScreen": "projects/7661839418307341010/screens/e4810ee75ef64e1abe8721a7a3664e7f",
+      "width": 1280,
+      "x": 1736,
+      "y": 3627
+    },
+    {
+      "height": 1222,
+      "id": "ec90e30c5ca94b9b8187f457efa74d5d",
+      "label": "Ambient Standby Mode",
+      "sourceScreen": "projects/7661839418307341010/screens/ec90e30c5ca94b9b8187f457efa74d5d",
+      "width": 390,
+      "x": 1024
+    }
+  ],
+  "thumbnailScreenshot": {
+    "downloadUrl": "https://lh3.googleusercontent.com/aida/AEtjO1VIjV_omhudhK601nvDuy_v4YEGjEIHSAoVNpayGVjEfwx0oPAT_fIQTkWGcR4WUKlEYB5lLbIeNUfcrQLAw_JQ-cIObdWTh9Kd03Tyed8YzICUJzsdoZeHG3weB71Y8Dj1naYVP7ba_jCMn-wHYa1u4gxhWqQhphC49JQvytFfgbcOpjGmGqYEvf4V8-3j4fsQifGKaCFTEJ7BGW3JXtKElRxuvFvDnt4J7WB_9LSofpGN_Zk8OYYO9A",
+    "name": "projects/7661839418307341010/screens/ec90e30c5ca94b9b8187f457efa74d5d/fileEntries/screenshot"
+  },
+  "title": "Agent Deck Monitor",
+  "updateTime": "2026-11-04T14:56:31.161025Z",
+  "visibility": "PRIVATE"
+}

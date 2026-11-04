@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#111317;color:#e2e2e6;-webkit-tap-highlight-color:transparent;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"primary-fixed-dim":"#c4c7ca","on-primary-fixed-variant":"#44474a","surface-container-low":"#1a1c1f","on-primary":"#2d3133","inverse-primary":"#5c5f61","primary-fixed":"#e0e3e6","on-tertiary":"#2c313a","on-secondary":"#2a313b","tertiary-fixed-dim":"#c2c6d2","surface-container-lowest":"#0c0e11","inverse-surface":"#e2e2e6","on-secondary-fixed":"#151c26","primary-container":"#e0e3e6","secondary-container":"#424955","on-primary-fixed":"#191c1e","secondary-fixed-dim":"#c0c7d5","error-container":"#93000a","on-secondary-fixed-variant":"#404752","on-error-container":"#ffdad6","tertiary":"#ffffff","secondary-fixed":"#dce3f1","background":"#111317","on-error":"#690005","outline-variant":"#44474a","surface-bright":"#37393d","tertiary-container":"#dee2ef","on-tertiary-container":"#60646f","on-primary-container":"#626567","outline":"#8e9194","surface-tint":"#c4c7ca","on-surface":"#e2e2e6","surface-dim":"#111317","surface-container-highest":"#333538","on-background":"#e2e2e6","primary":"#ffffff","error":"#ffb4ab","inverse-on-surface":"#2f3034","on-secondary-container":"#b2b9c6","on-tertiary-fixed":"#171c24","tertiary-fixed":"#dee2ef","surface-variant":"#333538","secondary":"#c0c7d5","surface":"#111317","on-surface-variant":"#c4c7c9","surface-container":"#1e2023","surface-container-high":"#282a2d","on-tertiary-fixed-variant":"#424751"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-lg":"1.5rem","space-sm":"0.5rem","gutter-desktop":"1.25rem","gutter-tablet":"0.75rem","margin-tablet":"1.5rem","margin-desktop":"2rem","space-xs":"0.25rem","space-xl":"2.5rem","space-md":"1rem",gutter:"1rem",margin:"1rem"},fontFamily:{"metric-large":["JetBrains Mono"],"headline-sm":["Geist"],"headline-lg":["Newsreader"],"body-lg":["Geist"],display:["Newsreader"],"display-mobile":["Newsreader"],"headline-lg-mobile":["Newsreader"],"label-meta":["JetBrains Mono"],"body-sm":["Geist"],"label-code":["JetBrains Mono"]},fontSize:{"metric-large":["2rem",{lineHeight:"2.25rem",letterSpacing:"-0.03em",fontWeight:"500"}],"headline-sm":["1.125rem",{lineHeight:"1.5rem",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-lg":["1.75rem",{lineHeight:"2.25rem",letterSpacing:"-0.015em",fontWeight:"400"}],"body-lg":["1rem",{lineHeight:"1.5rem",letterSpacing:"0em",fontWeight:"400"}],display:["2.5rem",{lineHeight:"3rem",letterSpacing:"-0.02em",fontWeight:"400"}],"display-mobile":["1.75rem",{lineHeight:"2.25rem",letterSpacing:"-0.01em",fontWeight:"400"}],"headline-lg-mobile":["1.375rem",{lineHeight:"1.75rem",letterSpacing:"-0.01em",fontWeight:"400"}],"label-meta":["0.6875rem",{lineHeight:"0.875rem",letterSpacing:"0.05em",fontWeight:"500"}],"body-sm":["0.875rem",{lineHeight:"1.25rem",letterSpacing:"0.005em",fontWeight:"400"}],"label-code":["0.8125rem",{lineHeight:"1.25rem",letterSpacing:"-0.01em",fontWeight:"400"}]}}}};</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-sm text-body-sm flex flex-col min-h-screen antialiased selection:bg-secondary-container selection:text-primary"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-20 px-gutter flex flex-col justify-center gap-space-xs"><div class="flex items-center justify-between"><div class="flex items-center gap-space-sm"><span class="w-1.5 h-1.5 bg-primary rounded-none"></span><span class="font-label-code text-label-code font-semibold tracking-wider text-primary uppercase">AGENT DECK</span><span class="font-label-meta text-label-meta text-on-surface-variant uppercase px-space-xs py-0.5 bg-surface-container-high rounded">Active Deck</span></div><div class="flex items-center gap-space-xs"><button aria-label="Filter Tools" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">tune</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="flex items-center justify-between font-label-meta text-label-meta text-on-surface-variant tracking-normal"><div class="flex items-center gap-space-xs truncate"><span class="text-primary font-medium">LIVE</span><span>Â·</span><span>4 AGENTS ACTIVE</span><span>Â·</span><span class="truncate">MESH: studio-m3</span></div><div class="flex items-center gap-space-xs font-label-meta text-label-meta text-outline"><span class="material-symbols-outlined text-[12px]">wifi_tethering</span><span>AUX-01</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-20 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full px-gutter gap-space-lg">
+<!-- Editorial Sub-Bar & Connection Telemetry -->
+<section class="flex flex-col gap-space-xs pt-space-xs">
+<div class="bg-surface-container-low px-space-md py-space-sm rounded-lg flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<span class="inline-block w-2 h-2 rounded-full bg-primary animate-pulse shrink-0"></span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs truncate">
+<span class="font-label-meta text-label-meta text-on-surface truncate">Tailscale Â· studio-mbp.mesh</span>
+<span class="bg-surface-container-high text-on-surface-variant font-label-meta text-label-meta px-1.5 py-0.5 rounded">28ms</span>
+</div>
+<span class="font-label-meta text-label-meta text-outline truncate">Synchronized 3s ago Â· Channel AUX-01</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 pl-space-xs">
+<span class="font-label-code text-label-code text-primary font-medium">5/5</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant uppercase">Visible</span>
+</div>
+</div>
+<!-- Glanceable Urgency Tally Header -->
+<div class="grid grid-cols-3 gap-space-xs">
+<div class="bg-surface-container px-space-sm py-2 rounded flex flex-col justify-center">
+<span class="font-label-meta text-label-meta text-error font-medium uppercase tracking-wider">Attention</span>
+<span class="font-metric-large text-metric-large text-error">02</span>
+</div>
+<div class="bg-surface-container px-space-sm py-2 rounded flex flex-col justify-center">
+<span class="font-label-meta text-label-meta text-on-surface-variant uppercase tracking-wider">Active</span>
+<span class="font-metric-large text-metric-large text-primary">03</span>
+</div>
+<div class="bg-surface-container px-space-sm py-2 rounded flex flex-col justify-center">
+<span class="font-label-meta text-label-meta text-outline uppercase tracking-wider">Idle / Done</span>
+<span class="font-metric-large text-metric-large text-on-surface-variant">04</span>
+</div>
+</div>
+</section>
+<!-- Filter Rails (Horizontal Scroll) -->
+<section class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<span class="font-label-meta text-label-meta uppercase tracking-wider text-on-surface-variant">Tool Scope Filter</span>
+<span class="font-label-meta text-label-meta text-outline">Observe-Only Mesh</span>
+</div>
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar py-0.5">
+<button class="px-2.5 py-1 rounded bg-primary text-on-primary font-label-meta text-label-meta tracking-wider uppercase shrink-0 font-medium">
+        All Tools (5)
+      </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta tracking-wider uppercase shrink-0 transition-colors">
+        OpenCode (2)
+      </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta tracking-wider uppercase shrink-0 transition-colors">
+        Claude Code (2)
+      </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta tracking-wider uppercase shrink-0 transition-colors">
+        Codex (1)
+      </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta tracking-wider uppercase shrink-0 transition-colors">
+        Antigravity (1)
+      </button>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta tracking-wider uppercase shrink-0 transition-colors">
+        Terminal (1)
+      </button>
+</div>
+<p class="font-label-meta text-label-meta text-outline">
+      Filtering affects this viewport only; background metric ingestion continues uninterupted.
+    </p>
+</section>
+<!-- Section: Pending Attention (Top Priority) -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 bg-error rounded-none shrink-0"></span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface tracking-tight">Pending Attention</h2>
+</div>
+<span class="font-label-meta text-label-meta text-error font-medium uppercase px-1.5 py-0.5 bg-error-container text-on-error-container rounded">
+        Halted (2)
+      </span>
+</div>
+<!-- Halted Card 1 -->
+<article class="bg-surface-container-high rounded-lg p-space-md flex flex-col gap-space-sm shadow-md">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary font-medium">Claude Code</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant px-1.5 py-0.5 bg-surface-container-highest rounded">cloud-kernel/infra</span>
+</div>
+<span class="font-label-meta text-label-meta text-error mt-0.5">Destructive Command Confirmation</span>
+</div>
+<div class="flex items-center gap-1 text-error bg-surface-container px-2 py-1 rounded shrink-0">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span class="font-label-meta text-label-meta font-medium tracking-tight">4m 12s</span>
+</div>
+</div>
+<!-- Recessed Terminal Instruction Block -->
+<div class="bg-surface-container-lowest p-space-sm rounded flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-meta text-label-meta text-outline uppercase tracking-wider">Awaiting Execution Auth</span>
+<span class="font-label-meta text-label-meta text-error">[ HALTED ]</span>
+</div>
+<p class="font-label-code text-label-code text-primary break-all">
+          terraform destroy -target=module.vpc_peering
+        </p>
+</div>
+<!-- Action Protocol Notice (No Approve button) -->
+<div class="bg-surface-container px-space-sm py-2 rounded flex items-center justify-between text-on-surface-variant gap-space-sm">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-[16px] text-error shrink-0">terminal</span>
+<span class="font-label-meta text-label-meta truncate">Observe only Â· Switch to <strong class="text-on-surface font-medium">Terminal 2</strong> on studio-mbp</span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline shrink-0">arrow_forward</span>
+</div>
+</article>
+<!-- Halted Card 2 -->
+<article class="bg-surface-container-high rounded-lg p-space-md flex flex-col gap-space-sm shadow-md">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary font-medium">OpenCode</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant px-1.5 py-0.5 bg-surface-container-highest rounded">auth-service/v2</span>
+</div>
+<span class="font-label-meta text-label-meta text-error mt-0.5">Filesystem Mutation Request</span>
+</div>
+<div class="flex items-center gap-1 text-error bg-surface-container px-2 py-1 rounded shrink-0">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span class="font-label-meta text-label-meta font-medium tracking-tight">1m 40s</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-meta text-label-meta text-outline uppercase tracking-wider">Target Mutation</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant font-medium">+42 / -14 lines</span>
+</div>
+<p class="font-label-code text-label-code text-primary break-all">
+          pkg/auth/jwt.go
+        </p>
+</div>
+<div class="bg-surface-container px-space-sm py-2 rounded flex items-center justify-between text-on-surface-variant gap-space-sm">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-[16px] text-error shrink-0">difference</span>
+<span class="font-label-meta text-label-meta truncate">Review diff in IDE at <strong class="text-on-surface font-medium">VS Code: auth-service</strong></span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline shrink-0">arrow_forward</span>
+</div>
+</article>
+</section>
+<!-- Section: Active Working Sessions -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 bg-primary rounded-none shrink-0"></span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface tracking-tight">Active Sessions</h2>
+</div>
+<span class="font-label-meta text-label-meta text-on-surface-variant uppercase">3 In Flight</span>
+</div>
+<!-- Active 1: Antigravity -->
+<article class="bg-surface-container rounded-lg p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Antigravity</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant px-1.5 py-0.5 bg-surface-container-high rounded truncate">payment-router</span>
+</div>
+<span class="font-label-meta text-label-meta text-on-surface-variant mt-0.5">Running test suite Â· concurrency-pass</span>
+</div>
+<div class="flex items-center gap-1 bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">
+<span class="material-symbols-outlined text-[12px] animate-spin">refresh</span>
+<span class="font-label-meta text-label-meta">3m 18s</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded flex flex-col gap-1">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-meta text-label-meta uppercase">Current Invocation</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant">exit: pending</span>
+</div>
+<p class="font-label-code text-label-code text-on-surface font-mono truncate">
+          go test -v -race ./internal/ledger/...
+        </p>
+</div>
+<!-- Telemetry Meta Footnote -->
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs font-label-meta text-label-meta text-on-surface-variant min-w-0 truncate">
+<span class="material-symbols-outlined text-[14px]">account_tree</span>
+<span class="truncate">2 runners: test-db-spinup, mock-stripe</span>
+</div>
+<div class="font-label-meta text-label-meta text-primary font-medium shrink-0 ml-2">
+          $0.42 API
+        </div>
+</div>
+</article>
+<!-- Active 2: Codex -->
+<article class="bg-surface-container rounded-lg p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Codex</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant px-1.5 py-0.5 bg-surface-container-high rounded truncate">web-frontend</span>
+</div>
+<span class="font-label-meta text-label-meta text-on-surface-variant mt-0.5">Refactoring core component</span>
+</div>
+<div class="flex items-center gap-1 bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">
+<span class="material-symbols-outlined text-[12px] animate-pulse">sync</span>
+<span class="font-label-meta text-label-meta">42s</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded flex flex-col gap-1">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-meta text-label-meta uppercase">Abstract Syntax Step</span>
+<span class="font-label-meta text-label-meta text-primary">82%</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface truncate">
+          Rewriting DataTable.tsx to use Virtualizer
+        </p>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden mt-1">
+<div class="bg-primary h-full w-[82%] rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs font-label-meta text-label-meta text-on-surface-variant truncate">
+<span class="material-symbols-outlined text-[14px]">memory</span>
+<span>18.4k tokens</span>
+</div>
+<div class="font-label-meta text-label-meta text-primary font-medium shrink-0 ml-2">
+          $0.11 est.
+        </div>
+</div>
+</article>
+<!-- Active 3: Terminal Agent -->
+<article class="bg-surface-container rounded-lg p-space-md flex flex-col gap-space-sm shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Terminal Agent</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant px-1.5 py-0.5 bg-surface-container-high rounded truncate">data-pipeline/etl</span>
+</div>
+<span class="font-label-meta text-label-meta text-on-surface-variant mt-0.5">Compiling release artifact</span>
+</div>
+<div class="flex items-center gap-1 bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">
+<span class="material-symbols-outlined text-[12px] animate-spin">rotate_right</span>
+<span class="font-label-meta text-label-meta">1m 55s</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded flex flex-col gap-1">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-meta text-label-meta uppercase">Stdout Stream</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant font-mono">148/212 crates</span>
+</div>
+<p class="font-label-code text-label-code text-on-surface truncate">
+          cargo build --release --bin ingest
+        </p>
+</div>
+<div class="flex items-center justify-between pt-0.5">
+<div class="flex items-center gap-space-xs font-label-meta text-label-meta text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">developer_board</span>
+<span>Target: x86_64-linux-gnu</span>
+</div>
+<div class="font-label-meta text-label-meta text-on-surface-variant font-medium shrink-0 ml-2">
+          PID 44812
+        </div>
+</div>
+</article>
+</section>
+<!-- Section: Quieter Recent Activity (Completions & Failures) -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface-variant tracking-tight">Recent Ledger</h2>
+<span class="font-label-meta text-label-meta text-outline uppercase">Settled Events</span>
+</div>
+<div class="flex flex-col gap-space-xs">
+<!-- Item D: Completed -->
+<div class="bg-surface-container-low p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs truncate">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span class="font-label-code text-label-code text-primary font-medium">Claude Code</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant truncate">docs-generator</span>
+</div>
+<span class="font-label-meta text-label-meta text-on-surface-variant shrink-0">2m ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1">
+          Updated OpenAPI specs and typed router definitions
+        </p>
+<div class="flex items-center justify-between text-outline font-label-meta text-label-meta pt-0.5">
+<span>4 files modified Â· Clean exit (0)</span>
+<span class="text-on-surface-variant font-mono">$0.28</span>
+</div>
+</div>
+<!-- Item E: Failed -->
+<div class="bg-surface-container-low p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs truncate">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span class="font-label-code text-label-code text-primary font-medium">OpenCode</span>
+<span class="font-label-meta text-label-meta text-on-surface-variant truncate">cron-scheduler</span>
+</div>
+<span class="font-label-meta text-label-meta text-error shrink-0">8m ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1">
+          Missing dependency <code class="text-on-surface font-mono">libpq-dev</code> during Docker build
+        </p>
+<div class="flex items-center justify-between font-label-meta text-label-meta pt-0.5">
+<span class="text-error font-medium">Exit Code 127</span>
+<button class="text-on-surface hover:text-primary transition-colors flex items-center gap-0.5">
+<span>View Trace</span>
+<span class="material-symbols-outlined text-[12px]">open_in_new</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Arm's Length Quick Glance Footer Telemetry -->
+<footer class="mt-space-sm bg-surface-container-lowest p-space-md rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between font-label-meta text-label-meta text-outline">
+<span>ARM-LENGTH ERGONOMIC GAUGE</span>
+<span class="text-primary font-mono">AUX-SCREEN-01</span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm pt-1">
+<div>
+<span class="font-label-meta text-label-meta text-on-surface-variant">TOTAL SESSION TOKENS</span>
+<p class="font-metric-large text-metric-large text-on-surface">142.8k</p>
+</div>
+<div>
+<span class="font-label-meta text-label-meta text-on-surface-variant">ESTIMATED RUN COST</span>
+<p class="font-metric-large text-metric-large text-on-surface">$1.49</p>
+</div>
+</div>
+</footer>
+</div>
+<script>
+  // Simple micro-interaction for scope filter chips
+  document.querySelectorAll('section:nth-of-type(2) button').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('section:nth-of-type(2) button').forEach(b => {
+        b.className = "px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant hover:text-on-surface font-label-meta text-label-meta tracking-wider uppercase shrink-0 transition-colors";
+      });
+      button.className = "px-2.5 py-1 rounded bg-primary text-on-primary font-label-meta text-label-meta tracking-wider uppercase shrink-0 font-medium";
+    });
+  });
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/85 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary bg-surface-container-high/60"><div class="flex items-stretch justify-around h-16 px-gutter"><a aria-current="page" class="flex-1 flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] transition-colors text-primary bg-surface-container-high/60" data-path="active-deck" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span class="font-label-meta text-label-meta uppercase tracking-wider">Deck</span></a><a class="flex-1 flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="ambient-standby" href="#"><span class="material-symbols-outlined text-[20px]">visibility</span><span class="font-label-meta text-label-meta uppercase tracking-wider">Standby</span></a><a class="flex-1 flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="cost-telemetry" href="#"><span class="material-symbols-outlined text-[20px]">finance_mode</span><span class="font-label-meta text-label-meta uppercase tracking-wider">Telemetry</span></a><a class="flex-1 flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="mesh-nodes" href="#"><span class="material-symbols-outlined text-[20px]">hub</span><span class="font-label-meta text-label-meta uppercase tracking-wider">Mesh</span></a></div></nav></body></html>

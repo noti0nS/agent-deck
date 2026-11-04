@@ -1,5 +1,6 @@
 <script lang="ts">
   import { deckStore, type ViewName } from '$lib/stores/deck.svelte';
+  import { formatTokens } from '$lib/format';
   import SourceSelector from '$lib/components/SourceSelector.svelte';
   import AmbientView from '$lib/views/AmbientView.svelte';
   import DeckView from '$lib/views/DeckView.svelte';
@@ -8,45 +9,9 @@
   import DetailView from '$lib/views/DetailView.svelte';
 
   const MAIN_VIEWS: ViewName[] = ['ambient', 'deck', 'usage', 'ledger'];
-  const VIEW_INDEX: Record<ViewName, string> = {
-    ambient: '01',
-    deck: '02',
-    usage: '03',
-    ledger: '04',
-    detail: '05'
-  };
-
-  let touchStartX = 0;
-  let touchStartY = 0;
+  let settingsOpen = $state(false);
   let pairCodeInput = $state('');
   let pairError = $state(false);
-
-  function handleTouchStart(e: TouchEvent) {
-    if (e.touches.length === 1) {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    }
-  }
-
-  function handleTouchEnd(e: TouchEvent) {
-    if (e.changedTouches.length !== 1) return;
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    const dy = e.changedTouches[0].clientY - touchStartY;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
-
-    if (deckStore.activeView === 'detail') {
-      if (dx > 60) deckStore.backFromDetail();
-      return;
-    }
-
-    const idx = MAIN_VIEWS.indexOf(deckStore.activeView);
-    if (idx === -1) return;
-    if (dx < -60 && idx < MAIN_VIEWS.length - 1) {
-      deckStore.setView(MAIN_VIEWS[idx + 1]);
-    } else if (dx > 60 && idx > 0) {
-      deckStore.setView(MAIN_VIEWS[idx - 1]);
-    }
-  }
 
   async function onPairSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -59,16 +24,17 @@
   );
 </script>
 
+<svelte:window onkeydown={(event) => { if (event.key === 'Escape') settingsOpen = false; }} />
+
 <main
-  class="max-w-[1440px] mx-auto px-3 sm:px-4 pt-3 pb-nav"
-  ontouchstart={handleTouchStart}
-  ontouchend={handleTouchEnd}
+  class="dashboard-shell"
+
 >
   {#if deckStore.needsPairing}
     <div class="max-w-md mx-auto mt-10 sm:mt-20 bezel-specular rounded p-5 sm:p-6 space-y-4">
       <div class="flex items-center gap-2 border-b border-[#212631] pb-3">
         <span class="font-mono-tabular text-[13px] font-bold text-[#6BA6FF]">&gt;_</span>
-        <span class="chrome-label !text-[#ECEDF2]">OPENCODE // AGENT DECK PAIRING</span>
+        <span class="chrome-label !text-[#ECEDF2]">AGENT DECK / PAIRING</span>
       </div>
       <h1 class="text-[18px] sm:text-[20px] font-semibold tracking-tight text-[#ECEDF2]">Pair Device with Agent Deck</h1>
       <p class="text-[13px] sm:text-[14px] text-[#8B93A6]">
@@ -106,7 +72,34 @@
       </div>
     {/if}
 
-    {#if deckStore.activeView !== 'ambient'}<SourceSelector />{/if}
+    {#if deckStore.activeView !== 'ambient'}
+      <header class="dashboard-header">
+        <a class="dashboard-brand" href="/" aria-label="Agent Deck home"><span aria-hidden="true">&gt;_</span> Agent Deck</a>
+        <span class="dashboard-host"><span class="host-dot"></span> {deckStore.visibleAggregates.activeCount} agents active</span>
+        <div class="dashboard-summary">
+          {#if deckStore.visibleAggregates.waitingCount}<span class="attention-count">{deckStore.visibleAggregates.waitingCount} awaiting attention</span>{/if}
+          <span class="running-count">{deckStore.visibleAggregates.activeCount} active</span>
+          {#if deckStore.visibleAggregates.hasExactCost}<span class="dashboard-tokens">$ {deckStore.visibleAggregates.todayCostExactUsd.toFixed(2)}</span>{/if}
+          {#if deckStore.visibleAggregates.hasEstimatedCost}<span class="dashboard-tokens">$ {deckStore.visibleAggregates.todayCostEstimatedUsd.toFixed(2)} est.</span>{/if}
+          {#if deckStore.visibleAggregates.burnRateAlarm}<span class="attention-count" data-testid="burn-rate-alarm">High spend · ${deckStore.visibleAggregates.burnRateUsdPerMin.toFixed(2)}/min</span>{/if}
+          <span class="dashboard-tokens">{formatTokens(deckStore.visibleAggregates.todayTokensIn + deckStore.visibleAggregates.todayTokensOut)} tok today</span>
+          <div class="settings-anchor">
+            <button type="button" class="dashboard-settings" aria-label="Settings" aria-expanded={settingsOpen} onclick={() => settingsOpen = !settingsOpen}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+        </div>
+      </header>
+      {#if settingsOpen}
+        <button type="button" class="settings-backdrop" aria-label="Dismiss settings" onclick={() => settingsOpen = false}></button>
+        <aside class="settings-panel" aria-label="Display settings">
+          <div class="settings-panel-title"><strong>Agent Deck</strong><button type="button" aria-label="Close settings" onclick={() => settingsOpen = false}>Close</button></div>
+          <SourceSelector />
+          <nav aria-label="Deck views">{#each MAIN_VIEWS as v}<button type="button" data-testid="nav-{v}" onclick={() => { deckStore.setView(v); settingsOpen = false; }} aria-current={deckStore.activeView === v ? 'page' : undefined}>{v}</button>{/each}</nav>
+          <a href="/settings">All settings</a>
+        </aside>
+      {/if}
+      {#if deckStore.activeView !== 'deck' && deckStore.activeView !== 'detail'}<button class="back-projects" type="button" onclick={() => deckStore.setView('deck')}>Back to projects</button>{/if}
+
+    {/if}
     <!-- Active View Container -->
     {#if deckStore.activeView === 'ambient'}
       <AmbientView />
@@ -118,45 +111,6 @@
       <LedgerView />
     {:else if deckStore.activeView === 'detail'}
       <DetailView />
-    {/if}
-
-    <!-- Bottom Thumb-Reach Segmented Terminal Dock (≥48px hit targets, hidden in chrome-free Ambient) -->
-    {#if deckStore.activeView !== 'ambient'}
-      <nav
-        aria-label="Deck views"
-        class="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-[#212631] bg-[#0D0F14]/95 backdrop-blur-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
-      >
-        <div class="mx-auto flex max-w-[1440px] items-center justify-between px-2 pt-1.5 sm:px-4">
-          <!-- Left OpenCode Observer Stamp (Tablet/Desktop) -->
-          <div class="hidden lg:flex items-center gap-2 min-w-[190px]">
-            <span class="w-1.5 h-1.5 rounded-full bg-[#3DDC97]"></span>
-            <span class="chrome-label tracking-widest">LIVE DECK OBSERVER</span>
-          </div>
-
-          <!-- Center Segmented Channels -->
-          <div class="flex flex-1 items-stretch gap-1 sm:flex-none sm:justify-center sm:gap-2">
-            {#each MAIN_VIEWS as v}
-              {@const isActive = deckStore.activeView === v}
-              <button
-                type="button"
-                onclick={() => deckStore.setView(v)}
-                aria-current={isActive ? 'page' : undefined}
-                class="relative min-h-[48px] flex-1 rounded-sm px-1.5 font-mono-tabular text-[11px] font-semibold uppercase tracking-wider transition-colors active:bg-[#171B24] sm:flex-none sm:px-5 sm:text-[12px] {isActive ? 'bg-[#171B24] text-[#ECEDF2] border border-[#2E3545] shadow-[inset_0_2px_0_0_#6BA6FF]' : 'text-[#8B93A6] hover:text-[#ECEDF2] hover:bg-[#12151C] border border-transparent'}"
-                data-testid="nav-{v}"
-              >
-                <span class="hidden sm:inline text-[#4C5365] mr-1.5">{VIEW_INDEX[v]}</span>{v}
-              </button>
-            {/each}
-          </div>
-
-          <!-- Right Cadence Stamp (Tablet/Desktop) -->
-          <div class="hidden lg:flex items-center justify-end gap-2 min-w-[190px] font-mono-tabular text-[11px] text-[#8B93A6]">
-            <span class="chrome-label">SEQ #{deckStore.state.seq}</span>
-            <span class="text-[#4C5365]">·</span>
-            <a href="/settings" class="chrome-label hover:!text-[#ECEDF2] transition-colors">CFG</a>
-          </div>
-        </div>
-      </nav>
     {/if}
   {/if}
 </main>

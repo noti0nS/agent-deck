@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_tab" name="shell-type"/>
+<title>Avionics Agent Deck // MFD-HUD</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+    @layer base {
+      html, body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #07090c;
+        color: #e2e8f0;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        overscroll-behavior-y: none;
+      }
+      .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px); }
+      .pt-safe { padding-top: max(env(safe-area-inset-top, 16px), 16px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+
+    /* Crisp Avionics Caution Pulse */
+    @keyframes cautionBlink {
+      0%, 49% { background-color: rgba(245, 158, 11, 0.18); border-color: #f59e0b; color: #fbbf24; }
+      50%, 100% { background-color: rgba(245, 158, 11, 0.05); border-color: rgba(245, 158, 11, 0.4); color: #d97706; }
+    }
+    .annunciator-caution-active {
+      animation: cautionBlink 1.4s steps(1, start) infinite;
+    }
+
+    /* Avionics Corner Bracket Box Styling */
+    .mfd-box {
+      position: relative;
+      background-color: #0a0d12;
+      border: 1px solid #1a222d;
+    }
+    .mfd-box::before, .mfd-box::after {
+      content: "";
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      pointer-events: none;
+    }
+    .mfd-box::before {
+      top: -1px; left: -1px;
+      border-top: 2px solid #38bdf8;
+      border-left: 2px solid #38bdf8;
+    }
+    .mfd-box::after {
+      bottom: -1px; right: -1px;
+      border-bottom: 2px solid #38bdf8;
+      border-right: 2px solid #38bdf8;
+    }
+    .mfd-box-amber::before {
+      border-top-color: #f59e0b;
+      border-left-color: #f59e0b;
+    }
+    .mfd-box-amber::after {
+      border-bottom-color: #f59e0b;
+      border-right-color: #f59e0b;
+    }
+    .mfd-box-emerald::before {
+      border-top-color: #10b981;
+      border-left-color: #10b981;
+    }
+    .mfd-box-emerald::after {
+      border-bottom-color: #10b981;
+      border-right-color: #10b981;
+    }
+
+    /* Tape scale marks */
+    .tape-ticks {
+      background-image: repeating-linear-gradient(to right, #24303f, #24303f 1px, transparent 1px, transparent 12px);
+    }
+  </style>
+</head>
+<body class="bg-[#07090c] text-[#e2e8f0] font-['Geist',sans-serif] text-sm antialiased selection:bg-[#1a2e40] selection:text-[#38bdf8] flex flex-col min-h-screen">
+<!-- ============================================================ -->
+<!-- 1. TOP HUD / MASTER ANNUNCIATOR & FLIGHT VECTOR TELEMETRY   -->
+<!-- ============================================================ -->
+<header class="fixed top-0 inset-x-0 z-40 pt-safe bg-[#07090c]/95 backdrop-blur-md border-b border-[#1c2430]">
+<div class="px-3.5 py-2.5 flex flex-col gap-2 max-w-2xl mx-auto w-full font-['JetBrains_Mono']">
+<!-- Topmost Registration, Deck Title, and Tailnet Bus Status -->
+<div class="flex items-center justify-between text-[11px] leading-none">
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1 bg-[#10151d] px-1.5 py-0.5 border border-[#202b3a] rounded-sm text-cyan-400 font-semibold tracking-wider">
+<span class="inline-block w-1.5 h-1.5 bg-cyan-400"></span>
+<span>MFD-01</span>
+</div>
+<span class="text-slate-100 font-bold tracking-widest text-[12px]">FLIGHT DECK // AGENT MESH</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="text-[10px] text-slate-400 bg-[#0d1219] px-2 py-0.5 border border-[#1b2533] flex items-center gap-1.5">
+<span class="text-slate-500 font-normal">REG:</span>
+<span class="text-emerald-400 font-medium tracking-tight">STUDIO-MBP</span>
+<span class="text-slate-600">|</span>
+<span class="text-cyan-300">28ms BUS</span>
+</div>
+<button aria-label="Refresh mesh sync" class="w-6 h-6 flex items-center justify-center border border-[#1e2838] bg-[#0c1017] text-slate-400 hover:text-cyan-300 transition-colors">
+<span class="material-symbols-outlined text-[14px]">refresh</span>
+</button>
+</div>
+</div>
+<!-- Master Caution & Warning Annunciator Strip (Direct Aerospace Glass Cockpit Spec) -->
+<div class="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold tracking-wider">
+<!-- Master Caution: 2 Input Required (Blinking High Contrast) -->
+<div class="annunciator-caution-active border px-2 py-1 flex items-center justify-center gap-1.5 rounded-none">
+<span class="inline-block w-1.5 h-1.5 bg-amber-400"></span>
+<span>MASTER CAUT [ 2 REQ ]</span>
+</div>
+<!-- Master Normal: 3 Running -->
+<div class="bg-[#0b1613] border border-emerald-500/50 text-emerald-400 px-2 py-1 flex items-center justify-center gap-1.5 rounded-none">
+<span class="inline-block w-1.5 h-1.5 bg-emerald-400"></span>
+<span>SYS NORM [ 3 RUN ]</span>
+</div>
+<!-- Settled Tasks -->
+<div class="bg-[#0e1219] border border-[#222d3d] text-slate-400 px-2 py-1 flex items-center justify-center gap-1.5 rounded-none">
+<span class="inline-block w-1.5 h-1.5 bg-slate-500"></span>
+<span>STANDBY [ 4 SETL ]</span>
+</div>
+</div>
+<!-- Flight Vector Ribbon: Token Burn VSI + Total Cost + Subsystems Count -->
+<div class="flex items-center justify-between text-[10px] border-t border-[#151c27] pt-1.5 text-slate-400">
+<div class="flex items-center gap-3">
+<span class="flex items-center gap-1 text-slate-300">
+<span class="text-slate-500">SUBSYS:</span> <span class="text-cyan-300 font-semibold">5 ACTIVE</span>
+</span>
+<span class="text-slate-600">/</span>
+<span class="flex items-center gap-1">
+<span class="text-slate-500">BURN VSI:</span> <span class="text-slate-200">142k TOK</span> <span class="text-emerald-400 text-[9px]">â–² +420/m</span>
+</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="text-slate-500">FUEL/COST:</span>
+<span class="text-slate-100 font-semibold bg-[#111722] px-1.5 py-0.5 border border-[#1f2a3a] text-cyan-300">$1.49 USD</span>
+</div>
+</div>
+</div>
+</header>
+<!-- ============================================================ -->
+<!-- 2. MAIN AVIONICS SUBSYSTEM MATRIX (Projects as Subsystems)   -->
+<!-- ============================================================ -->
+<main class="flex-1 w-full max-w-2xl mx-auto px-3.5 pt-[128px] pb-24 flex flex-col gap-3 font-['JetBrains_Mono']">
+<!-- Avionics Tactical Search Filter Strip -->
+<div class="flex items-center gap-2 text-xs">
+<div class="flex-1 relative flex items-center bg-[#0b0f16] border border-[#1e2938]">
+<span class="pl-2.5 text-slate-500 text-[11px] select-none font-bold">NAV&gt;</span>
+<input class="w-full bg-transparent border-0 text-xs text-cyan-200 px-2 py-1.5 placeholder:text-slate-600 focus:ring-0 focus:outline-none uppercase font-['JetBrains_Mono'] tracking-wide" id="projectSearchInput" placeholder="FILTER SUBSYS / REPO OR AGENT..."/>
+<span class="material-symbols-outlined text-[15px] pr-2 text-slate-500">radar</span>
+</div>
+<div class="flex items-center border border-[#1e2938] bg-[#090d14] text-[10px] tracking-wider uppercase font-semibold">
+<button class="px-2.5 py-1.5 bg-[#1b2636] text-cyan-300" id="filterAllBtn">ALL</button>
+<button class="px-2.5 py-1.5 text-slate-400 hover:text-amber-400 transition-colors" id="filterAttentionBtn">CAUTION</button>
+</div>
+</div>
+<!-- ========================================== -->
+<!-- SUBSYSTEM 01: CLOUD-KERNEL/INFRA           -->
+<!-- ========================================== -->
+<section class="project-card mfd-box mfd-box-amber p-0 overflow-hidden" data-has-action="true" data-project="cloud-kernel/infra">
+<!-- Instrument Banner Header -->
+<div class="cursor-pointer px-3 py-2 bg-[#0d121b] border-b border-[#1b2638] flex items-center justify-between hover:bg-[#121926] transition-colors" onclick="toggleProject('cloud-kernel-infra')">
+<div class="flex items-center gap-2 min-w-0">
+<span class="text-[10px] px-1 py-0.2 bg-slate-800 text-slate-300 border border-slate-700 font-bold">SYS-01</span>
+<span class="text-xs font-bold text-slate-100 truncate tracking-wide">CLOUD-KERNEL/INFRA</span>
+<span class="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/40 font-bold uppercase tracking-wider">CAUTION // AWAITING AUTH</span>
+</div>
+<div class="flex items-center gap-2.5 shrink-0 text-[11px] text-slate-400">
+<span class="text-slate-500 text-[10px]">2 SESS</span>
+<span class="material-symbols-outlined text-[16px] text-amber-400 transition-transform duration-200" id="chevron-cloud-kernel-infra">expand_more</span>
+</div>
+</div>
+<!-- Subsystem Content Matrix -->
+<div class="divide-y divide-[#161f2c]" id="content-cloud-kernel-infra">
+<!-- Active Caution Telemetry Cell -->
+<div class="p-3 bg-[#0a0f17]/90 hover:bg-[#0e141f] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-ck-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<div class="mt-1 w-2 h-2 bg-amber-400 shrink-0"></div>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap text-xs">
+<span class="font-bold text-slate-100">CLAUDE CODE</span>
+<span class="text-[10px] px-1.5 py-0.2 bg-amber-400/20 text-amber-300 border border-amber-400/50 font-bold">INTERRUPT: AUTH-REQ</span>
+<span class="text-[10px] text-slate-500">PID: 4109</span>
+</div>
+<div class="text-[11px] text-amber-200/90 mt-1 font-mono tracking-tight">
+                  DEST-CMD: terraform destroy -target=module.vpc_peering
+                </div>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0 text-right">
+<span class="text-[11px] text-amber-400 font-bold">T+ 04:12</span>
+<span class="material-symbols-outlined text-[15px] text-slate-400" id="subchev-session-ck-1">unfold_more</span>
+</div>
+</div>
+<!-- Avionics Detailed Flight Drawer -->
+<div class="hidden mt-3 pt-2.5 border-t border-[#1b2535] flex flex-col gap-2" id="session-ck-1">
+<div class="bg-[#05070a] p-2 border border-[#1b2535]">
+<div class="flex items-center justify-between text-[10px] text-slate-400 pb-1 border-b border-[#141d2a]">
+<span class="text-amber-400 font-bold">HALTED INVOCATION VECTOR</span>
+<span class="text-slate-500 font-mono">NODE: STUDIO-MBP.MESH</span>
+</div>
+<code class="text-xs text-amber-300 font-mono block mt-1.5 whitespace-pre-wrap break-all bg-[#0a0e14] p-1.5 border border-[#192230]">terraform destroy -target=module.vpc_peering</code>
+</div>
+<!-- Pitch/Telemetry Data Matrix -->
+<div class="grid grid-cols-2 gap-1.5 text-[10px]">
+<div class="bg-[#090d14] p-1.5 border border-[#18212e]">
+<span class="text-slate-500 block">SESSION TELEM</span>
+<span class="text-cyan-300 font-medium">12.4k TOK Â· $0.18</span>
+</div>
+<div class="bg-[#090d14] p-1.5 border border-[#18212e]">
+<span class="text-slate-500 block">BRANCH / FLIGHTWAY</span>
+<span class="text-slate-200 font-medium">feat/vpc-cleanup</span>
+</div>
+</div>
+<div class="flex items-center justify-between px-2 py-1.5 bg-[#0b1018] border border-[#212d3d] text-[10px] text-slate-300">
+<div class="flex items-center gap-1.5 truncate">
+<span class="material-symbols-outlined text-[13px] text-amber-400">terminal</span>
+<span class="truncate">HANDOVER: EXEC RESOLUTION IN <strong class="text-slate-100">STUDIO-MBP: TTY2</strong></span>
+</div>
+<span class="text-amber-400 font-bold shrink-0 ml-1">OBSERVER LOCK</span>
+</div>
+</div>
+</div>
+<!-- Settled Session Row -->
+<div class="px-3 py-2 bg-[#080b10] flex items-center justify-between text-xs hover:bg-[#0c1017] transition-colors">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 bg-slate-600 shrink-0"></span>
+<span class="text-slate-400 font-medium">CLAUDE CODE</span>
+<span class="text-slate-500 text-[11px] truncate">docs-generator: synced OpenAPI spec definitions</span>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-[10px] text-slate-500">
+<span class="text-emerald-500">RC: 0</span>
+<span>Â·</span>
+<span>-2m AGO</span>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- SUBSYSTEM 02: AUTH-SERVICE/V2              -->
+<!-- ========================================== -->
+<section class="project-card mfd-box mfd-box-amber p-0 overflow-hidden" data-has-action="true" data-project="auth-service/v2">
+<div class="cursor-pointer px-3 py-2 bg-[#0d121b] border-b border-[#1b2638] flex items-center justify-between hover:bg-[#121926] transition-colors" onclick="toggleProject('auth-service-v2')">
+<div class="flex items-center gap-2 min-w-0">
+<span class="text-[10px] px-1 py-0.2 bg-slate-800 text-slate-300 border border-slate-700 font-bold">SYS-02</span>
+<span class="text-xs font-bold text-slate-100 truncate tracking-wide">AUTH-SERVICE/V2</span>
+<span class="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/40 font-bold uppercase tracking-wider">CAUTION // DIFF REVIEW</span>
+</div>
+<div class="flex items-center gap-2.5 shrink-0 text-[11px] text-slate-400">
+<span class="text-slate-500 text-[10px]">1 SESS</span>
+<span class="material-symbols-outlined text-[16px] text-amber-400 transition-transform duration-200" id="chevron-auth-service-v2">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#161f2c]" id="content-auth-service-v2">
+<div class="p-3 bg-[#0a0f17]/90 hover:bg-[#0e141f] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-auth-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<div class="mt-1 w-2 h-2 bg-amber-400 shrink-0"></div>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap text-xs">
+<span class="font-bold text-slate-100">OPENCODE</span>
+<span class="text-[10px] px-1.5 py-0.2 bg-amber-400/20 text-amber-300 border border-amber-400/50 font-bold">MUTATION PENDING</span>
+<span class="text-[10px] text-cyan-300 font-bold">+42 / -14 L</span>
+</div>
+<div class="text-[11px] text-slate-300 mt-1 font-mono tracking-tight truncate">
+                  DIFF-TARGET: pkg/auth/jwt.go signature rewrite
+                </div>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0 text-right">
+<span class="text-[11px] text-amber-400 font-bold">T+ 01:40</span>
+<span class="material-symbols-outlined text-[15px] text-slate-400" id="subchev-session-auth-1">unfold_more</span>
+</div>
+</div>
+<div class="hidden mt-3 pt-2.5 border-t border-[#1b2535] flex flex-col gap-2" id="session-auth-1">
+<div class="bg-[#05070a] p-2 border border-[#1b2535] text-[11px]">
+<div class="flex justify-between text-[10px] text-slate-500 pb-1 border-b border-[#141d2a]">
+<span>FILE MUTATION VECTOR</span>
+<span class="text-cyan-300">DELTA: +42 / -14</span>
+</div>
+<code class="text-slate-200 font-mono block mt-1">pkg/auth/jwt.go : ValidateTokenClaims()</code>
+</div>
+<div class="flex items-center justify-between px-2 py-1.5 bg-[#0b1018] border border-[#212d3d] text-[10px] text-slate-300">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[13px] text-cyan-400">code</span>
+<span>REVIEW DELTA IN <strong class="text-slate-100">VS CODE WORKSPACE</strong></span>
+</div>
+<span class="text-slate-500">EXTERNAL FLIGHT</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- SUBSYSTEM 03: PAYMENT-ROUTER               -->
+<!-- ========================================== -->
+<section class="project-card mfd-box mfd-box-emerald p-0 overflow-hidden" data-has-action="false" data-project="payment-router">
+<div class="cursor-pointer px-3 py-2 bg-[#0d121b] border-b border-[#1b2638] flex items-center justify-between hover:bg-[#121926] transition-colors" onclick="toggleProject('payment-router')">
+<div class="flex items-center gap-2 min-w-0">
+<span class="text-[10px] px-1 py-0.2 bg-slate-800 text-slate-300 border border-slate-700 font-bold">SYS-03</span>
+<span class="text-xs font-bold text-slate-100 truncate tracking-wide">PAYMENT-ROUTER</span>
+<span class="text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-300 border border-emerald-500/40 font-bold uppercase tracking-wider">ENGAGED // AUTONOMOUS</span>
+</div>
+<div class="flex items-center gap-2.5 shrink-0 text-[11px] text-slate-400">
+<span class="text-slate-500 text-[10px]">1 SESS</span>
+<span class="material-symbols-outlined text-[16px] text-emerald-400 transition-transform duration-200" id="chevron-payment-router">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#161f2c]" id="content-payment-router">
+<div class="p-3 bg-[#0a0f17]/90 hover:bg-[#0e141f] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-pr-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<div class="mt-1 w-2 h-2 bg-emerald-400 shrink-0"></div>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap text-xs">
+<span class="font-bold text-slate-100">ANTIGRAVITY</span>
+<span class="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-bold">ENGAGED</span>
+<span class="text-[10px] text-slate-400 font-mono">2 THREAD RUNNERS</span>
+</div>
+<div class="text-[11px] text-slate-300 mt-1 font-mono truncate">
+                  TEST VECTOR: concurrency race detection suite
+                </div>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0 text-right">
+<span class="text-[11px] text-emerald-300 font-bold">T+ 03:18</span>
+<span class="material-symbols-outlined text-[15px] text-slate-400" id="subchev-session-pr-1">unfold_more</span>
+</div>
+</div>
+<div class="hidden mt-3 pt-2.5 border-t border-[#1b2535] flex flex-col gap-2" id="session-pr-1">
+<div class="bg-[#05070a] p-2 border border-[#1b2535]">
+<div class="flex justify-between text-[10px] text-slate-500 pb-1 border-b border-[#141d2a]">
+<span>COMMAND BUS INVOCATION</span>
+<span class="text-cyan-400">PID: 18024</span>
+</div>
+<code class="text-xs text-emerald-300 font-mono block mt-1">go test -v -race ./internal/ledger/...</code>
+</div>
+<div class="grid grid-cols-2 gap-1.5 text-[10px]">
+<div class="bg-[#090d14] p-1.5 border border-[#18212e]">
+<span class="text-slate-500 block">SUB-WORKERS</span>
+<span class="text-slate-200">test-db-spinup, mock-stripe</span>
+</div>
+<div class="bg-[#090d14] p-1.5 border border-[#18212e]">
+<span class="text-slate-500 block">SYSTEM APEX</span>
+<span class="text-cyan-300 font-medium">$0.42 API Â· 1.4 GB RAM</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- SUBSYSTEM 04: WEB-FRONTEND (Tape Gauge)    -->
+<!-- ========================================== -->
+<section class="project-card mfd-box mfd-box-emerald p-0 overflow-hidden" data-has-action="false" data-project="web-frontend">
+<div class="cursor-pointer px-3 py-2 bg-[#0d121b] border-b border-[#1b2638] flex items-center justify-between hover:bg-[#121926] transition-colors" onclick="toggleProject('web-frontend')">
+<div class="flex items-center gap-2 min-w-0">
+<span class="text-[10px] px-1 py-0.2 bg-slate-800 text-slate-300 border border-slate-700 font-bold">SYS-04</span>
+<span class="text-xs font-bold text-slate-100 truncate tracking-wide">WEB-FRONTEND</span>
+<span class="text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-300 border border-emerald-500/40 font-bold uppercase tracking-wider">CRUISE // 82% TAPE</span>
+</div>
+<div class="flex items-center gap-2.5 shrink-0 text-[11px] text-slate-400">
+<span class="text-slate-500 text-[10px]">1 SESS</span>
+<span class="material-symbols-outlined text-[16px] text-emerald-400 transition-transform duration-200" id="chevron-web-frontend">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#161f2c]" id="content-web-frontend">
+<div class="p-3 bg-[#0a0f17]/90 hover:bg-[#0e141f] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-wf-1')">
+<div class="flex items-start gap-2.5 min-w-0 flex-1">
+<div class="mt-1 w-2 h-2 bg-emerald-400 shrink-0"></div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center gap-2 flex-wrap text-xs">
+<span class="font-bold text-slate-100">CODEX</span>
+<span class="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-bold">REFACTORING</span>
+<span class="text-[10px] text-slate-400">AST TRANSFORM</span>
+</div>
+<div class="text-[11px] text-slate-300 mt-1 font-mono truncate">
+                  DataTable.tsx -&gt; virtual scroll renderer
+                </div>
+<!-- Avionics Tape Scale Indicator (Speed/Altitude Tape Aesthetic) -->
+<div class="mt-2 bg-[#06080d] p-1.5 border border-[#1a2533] max-w-sm">
+<div class="flex justify-between text-[9px] text-slate-400 mb-0.5 font-mono">
+<span class="text-slate-500">ALT/PCT TAPE</span>
+<span class="text-emerald-300 font-bold">82.0 % PROGRESS</span>
+</div>
+<div class="relative w-full h-3 bg-[#10151d] border border-[#222e3d] overflow-hidden tape-ticks">
+<div class="h-full bg-emerald-500/70 border-r-2 border-emerald-300" style="width: 82%;"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0 text-right">
+<span class="text-[11px] text-emerald-300 font-bold">T+ 00:42</span>
+<span class="material-symbols-outlined text-[15px] text-slate-400" id="subchev-session-wf-1">unfold_more</span>
+</div>
+</div>
+<div class="hidden mt-3 pt-2.5 border-t border-[#1b2535] flex flex-col gap-2" id="session-wf-1">
+<div class="grid grid-cols-2 gap-1.5 text-[10px]">
+<div class="bg-[#090d14] p-1.5 border border-[#18212e]">
+<span class="text-slate-500 block">CONSUMED TOKENS</span>
+<span class="text-cyan-300 font-medium">18.4k Â· $0.11 USD</span>
+</div>
+<div class="bg-[#090d14] p-1.5 border border-[#18212e]">
+<span class="text-slate-500 block">TARGET AIRFRAME</span>
+<span class="text-slate-200 truncate block">components/DataTable.tsx</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- SUBSYSTEM 05: DATA-PIPELINE/ETL            -->
+<!-- ========================================== -->
+<section class="project-card mfd-box p-0 overflow-hidden" data-has-action="false" data-project="data-pipeline/etl">
+<div class="cursor-pointer px-3 py-2 bg-[#0d121b] border-b border-[#1b2638] flex items-center justify-between hover:bg-[#121926] transition-colors" onclick="toggleProject('data-pipeline-etl')">
+<div class="flex items-center gap-2 min-w-0">
+<span class="text-[10px] px-1 py-0.2 bg-slate-800 text-slate-300 border border-slate-700 font-bold">SYS-05</span>
+<span class="text-xs font-bold text-slate-100 truncate tracking-wide">DATA-PIPELINE/ETL</span>
+<span class="text-[9px] px-1.5 py-0.5 bg-cyan-950/40 text-cyan-300 border border-cyan-800/50 font-bold uppercase tracking-wider">COMPILE // 148/212 CRATES</span>
+</div>
+<div class="flex items-center gap-2.5 shrink-0 text-[11px] text-slate-400">
+<span class="text-slate-500 text-[10px]">2 SESS</span>
+<span class="material-symbols-outlined text-[16px] text-slate-400 transition-transform duration-200" id="chevron-data-pipeline-etl">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#161f2c]" id="content-data-pipeline-etl">
+<!-- Compiling session -->
+<div class="p-3 bg-[#0a0f17]/90 hover:bg-[#0e141f] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-dp-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<div class="mt-1 w-2 h-2 bg-cyan-400 shrink-0"></div>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap text-xs">
+<span class="font-bold text-slate-100">TERMINAL AGENT</span>
+<span class="text-[10px] px-1.5 py-0.2 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 font-bold">COMPILING</span>
+<span class="text-[10px] text-slate-400">CRATES: 148/212</span>
+</div>
+<div class="text-[11px] text-slate-300 mt-1 font-mono truncate">
+                  cargo build --release --bin ingest
+                </div>
+</div>
+</div>
+<div class="flex items-center gap-1 shrink-0 text-right">
+<span class="text-[11px] text-cyan-300 font-bold">T+ 01:55</span>
+<span class="material-symbols-outlined text-[15px] text-slate-400" id="subchev-session-dp-1">unfold_more</span>
+</div>
+</div>
+<div class="hidden mt-3 pt-2.5 border-t border-[#1b2535] flex flex-col gap-2" id="session-dp-1">
+<div class="bg-[#05070a] p-2 border border-[#1b2535] text-[10px] text-slate-400">
+<div class="flex justify-between pb-1 border-b border-[#141d2a]">
+<span>TARGET ARCH: x86_64-linux-gnu</span>
+<span class="text-cyan-300">PID: 44812</span>
+</div>
+<div class="mt-1 text-slate-500">HOST AIRFRAME: studio-mbp.mesh (TAILNET L2)</div>
+</div>
+</div>
+</div>
+<!-- Standby / Settled session -->
+<div class="px-3 py-2 bg-[#080b10] flex items-center justify-between text-xs hover:bg-[#0c1017] transition-colors">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 bg-slate-600 shrink-0"></span>
+<span class="text-slate-400 font-medium">OPENCODE</span>
+<span class="text-slate-500 text-[11px] truncate">cron-scheduler: failed libpq-dev (Exit 127)</span>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-[10px] text-slate-500">
+<span class="text-amber-500/80">FAIL RC 127</span>
+<span>Â·</span>
+<span>-8m AGO</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- ============================================================ -->
+<!-- 3. COCKPIT LOWER INSTRUMENT RAIL / MFD CONTROL STRIP         -->
+<!-- ============================================================ -->
+<footer class="fixed bottom-0 inset-x-0 z-40 pb-safe bg-[#07090c]/98 backdrop-blur-md border-t border-[#1c2430]">
+<div class="max-w-2xl mx-auto px-3 py-2 flex flex-col gap-1.5 font-['JetBrains_Mono']">
+<!-- Cockpit MFD Bezel Softkeys -->
+<div class="grid grid-cols-4 gap-1.5 text-center text-[10px] font-bold">
+<button class="py-1.5 px-1 bg-[#121822] hover:bg-[#1a2333] border border-[#233145] text-amber-300 active:scale-95 transition-all" onclick="filterCautionSoftkey()">
+          [ MASTER ATTN ]
+        </button>
+<button class="py-1.5 px-1 bg-[#121822] hover:bg-[#1a2333] border border-[#233145] text-cyan-300 active:scale-95 transition-all" onclick="filterAllSoftkey()">
+          [ REPO MATRIX ]
+        </button>
+<button class="py-1.5 px-1 bg-[#121822] hover:bg-[#1a2333] border border-[#233145] text-slate-300 active:scale-95 transition-all" onclick="expandAll()">
+          [ EXPAND HUD ]
+        </button>
+<button class="py-1.5 px-1 bg-[#121822] hover:bg-[#1a2333] border border-[#233145] text-slate-400 active:scale-95 transition-all" onclick="collapseAll()">
+          [ STOW ALL ]
+        </button>
+</div>
+<!-- Instrument Datum Rail Status -->
+<div class="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-cyan-400 inline-block"></span>
+<span class="text-slate-300 font-semibold">AVIONICS V-4.2</span>
+<span>Â·</span>
+<span>SYNC ACTIVE (1000ms TICK)</span>
+</div>
+<div class="text-[9px] text-slate-400 font-mono">
+          MFD CHANNEL: CH-01 // PRIMARY
+        </div>
+</div>
+</div>
+</footer>
+<!-- Interactive Avionics Logic -->
+<script>
+    function toggleProject(id) {
+      const content = document.getElementById('content-' + id);
+      const chevron = document.getElementById('chevron-' + id);
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+      } else {
+        content.classList.add('hidden');
+        chevron.style.transform = 'rotate(-90deg)';
+      }
+    }
+
+    function toggleDetails(id) {
+      const detail = document.getElementById(id);
+      const chevron = document.getElementById('subchev-' + id);
+      if (detail.classList.contains('hidden')) {
+        detail.classList.remove('hidden');
+        if (chevron) chevron.innerText = 'unfold_less';
+      } else {
+        detail.classList.add('hidden');
+        if (chevron) chevron.innerText = 'unfold_more';
+      }
+    }
+
+    function expandAll() {
+      document.querySelectorAll('[id^="content-"]').forEach(el => el.classList.remove('hidden'));
+      document.querySelectorAll('[id^="chevron-"]').forEach(el => el.style.transform = 'rotate(0deg)');
+      document.querySelectorAll('[id^="session-"]').forEach(el => el.classList.remove('hidden'));
+      document.querySelectorAll('[id^="subchev-"]').forEach(el => el.innerText = 'unfold_less');
+    }
+
+    function collapseAll() {
+      document.querySelectorAll('[id^="session-"]').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('[id^="subchev-"]').forEach(el => el.innerText = 'unfold_more');
+    }
+
+    const searchInput = document.getElementById('projectSearchInput');
+    const filterAllBtn = document.getElementById('filterAllBtn');
+    const filterAttentionBtn = document.getElementById('filterAttentionBtn');
+    let onlyAttention = false;
+
+    function applyFilters() {
+      const query = (searchInput.value || '').toLowerCase().trim();
+      const cards = document.querySelectorAll('.project-card');
+
+      cards.forEach(card => {
+        const projectName = card.getAttribute('data-project').toLowerCase();
+        const cardText = card.innerText.toLowerCase();
+        const hasAction = card.getAttribute('data-has-action') === 'true';
+
+        const matchesQuery = !query || projectName.includes(query) || cardText.includes(query);
+        const matchesAction = !onlyAttention || hasAction;
+
+        if (matchesQuery && matchesAction) {
+          card.classList.remove('hidden');
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+    }
+
+    function setFilterMode(attnOnly) {
+      onlyAttention = attnOnly;
+      if (onlyAttention) {
+        filterAttentionBtn.className = "px-2.5 py-1.5 bg-[#1b2636] text-amber-300 font-bold";
+        filterAllBtn.className = "px-2.5 py-1.5 text-slate-400 hover:text-cyan-300 transition-colors";
+      } else {
+        filterAllBtn.className = "px-2.5 py-1.5 bg-[#1b2636] text-cyan-300 font-bold";
+        filterAttentionBtn.className = "px-2.5 py-1.5 text-slate-400 hover:text-amber-400 transition-colors";
+      }
+      applyFilters();
+    }
+
+    function filterCautionSoftkey() {
+      setFilterMode(true);
+    }
+
+    function filterAllSoftkey() {
+      setFilterMode(false);
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilters);
+    }
+
+    if (filterAllBtn && filterAttentionBtn) {
+      filterAllBtn.addEventListener('click', () => setFilterMode(false));
+      filterAttentionBtn.addEventListener('click', () => setFilterMode(true));
+    }
+  </script>
+</body></html>

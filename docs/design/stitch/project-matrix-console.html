@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_tab" name="shell-type"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+    @layer base {
+      html, body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #0b0d10;
+        color: #e1e4e8;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        overscroll-behavior-y: none;
+      }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 16px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+    .status-ping-amber::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 9999px;
+      background-color: #f59e0b;
+      opacity: 0.75;
+      animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    .status-ping-emerald::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 9999px;
+      background-color: #10b981;
+      opacity: 0.75;
+      animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    @keyframes ping {
+      75%, 100% {
+        transform: scale(2.2);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body class="bg-[#0b0d10] text-[#d6d9e0] font-['Geist',sans-serif] text-sm antialiased selection:bg-[#202736] flex flex-col min-h-screen">
+<!-- Fixed Clean Telemetry Header -->
+<header class="fixed top-0 inset-x-0 z-40 pt-safe bg-[#0b0d10]/90 backdrop-blur-md border-b border-[#1b1f26]">
+<div class="px-4 py-3 flex flex-col gap-2.5 max-w-2xl mx-auto w-full">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-2 h-2 rounded-sm bg-zinc-200"></div>
+<span class="font-['JetBrains_Mono'] text-xs font-semibold tracking-wider text-zinc-100 uppercase">AGENT DECK</span>
+<span class="text-[10px] text-zinc-400 font-['JetBrains_Mono'] px-1.5 py-0.5 rounded bg-[#161a22] border border-[#212733]">4 REPOS</span>
+</div>
+<div class="flex items-center gap-2">
+<!-- Mesh node status -->
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#13161c] border border-[#1e232c] text-[11px] font-['JetBrains_Mono'] text-zinc-400">
+<span class="relative flex h-1.5 w-1.5">
+<span class="status-ping-emerald"></span>
+<span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+</span>
+<span>studio-mbp</span>
+<span class="text-zinc-600">Â·</span>
+<span class="text-zinc-400">28ms</span>
+</div>
+<button aria-label="Refresh mesh sync" class="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#181c24] transition-colors">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+</button>
+</div>
+</div>
+<!-- Quick Metrics Ribbon: Clean & low glare -->
+<div class="flex items-center justify-between text-xs border-t border-[#161920] pt-2">
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5 font-['JetBrains_Mono'] text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+<span class="text-zinc-400">Needs Input:</span>
+<span class="text-amber-300 font-semibold">2</span>
+</div>
+<div class="flex items-center gap-1.5 font-['JetBrains_Mono'] text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="text-zinc-400">Running:</span>
+<span class="text-zinc-200 font-semibold">3</span>
+</div>
+<div class="flex items-center gap-1.5 font-['JetBrains_Mono'] text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
+<span class="text-zinc-500">Settled:</span>
+<span class="text-zinc-400">4</span>
+</div>
+</div>
+<div class="text-[11px] font-['JetBrains_Mono'] text-zinc-400">
+          Total: <span class="text-zinc-200">$1.49</span> <span class="text-zinc-600">/ 142k tok</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Scrollable Projects Deck -->
+<main class="flex-1 w-full max-w-2xl mx-auto px-4 pt-[116px] pb-24 flex flex-col gap-3">
+<!-- Search / Filter Strip -->
+<div class="flex items-center gap-2">
+<div class="flex-1 relative">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-[15px]">search</span>
+<input class="w-full bg-[#11141a] border border-[#1e232c] text-xs text-zinc-200 rounded px-2.5 pl-8 py-1.5 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors font-['JetBrains_Mono']" id="projectSearchInput" placeholder="Filter repositories or agents..."/>
+</div>
+<div class="flex items-center gap-1 bg-[#11141a] p-0.5 rounded border border-[#1e232c] text-[11px] font-['JetBrains_Mono']">
+<button class="px-2 py-1 rounded bg-[#202530] text-zinc-200 font-medium" id="filterAllBtn">All</button>
+<button class="px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#171b22] transition-colors" id="filterAttentionBtn">Needs Action</button>
+</div>
+</div>
+<!-- PROJECT 1: cloud-kernel/infra (Attention Required + In-flight) -->
+<section class="project-card rounded-lg bg-[#11141a] border border-[#1e232c] overflow-hidden transition-all duration-150" data-has-action="true" data-project="cloud-kernel/infra">
+<!-- Project Header Row (Clickable toggle) -->
+<div class="cursor-pointer px-3.5 py-3 flex items-center justify-between hover:bg-[#151922] transition-colors border-b border-[#1b2029]" onclick="toggleProject('cloud-kernel-infra')">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-[17px] text-zinc-400 shrink-0">folder_open</span>
+<div class="flex items-center gap-2 truncate">
+<span class="font-['JetBrains_Mono'] text-xs font-semibold text-zinc-100 truncate">cloud-kernel/infra</span>
+<span class="text-[10px] font-['JetBrains_Mono'] px-1.5 py-0.2 rounded bg-amber-950/40 text-amber-300 border border-amber-800/40">1 AWAITING INPUT</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-['JetBrains_Mono'] text-[11px] text-zinc-400">2 sessions</span>
+<span class="material-symbols-outlined text-[18px] text-zinc-400 transition-transform duration-200" id="chevron-cloud-kernel-infra">expand_more</span>
+</div>
+</div>
+<!-- Project Sessions Container -->
+<div class="divide-y divide-[#181d26]" id="content-cloud-kernel-infra">
+<!-- Session: Waiting for input (Clickable for rich inspector) -->
+<div class="p-3 bg-[#13161e]/50 hover:bg-[#151922] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-ck-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<span class="mt-1 relative flex h-2 w-2 shrink-0">
+<span class="status-ping-amber"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+</span>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="text-xs font-medium text-zinc-100 font-['JetBrains_Mono']">Claude Code</span>
+<span class="text-[11px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-['JetBrains_Mono'] font-medium">Waiting for Input</span>
+<span class="text-[10px] text-zinc-500 font-['JetBrains_Mono']">PID 4109</span>
+</div>
+<p class="text-xs text-zinc-300 mt-0.5 truncate">Destructive command confirmation: terraform destroy target</p>
+</div>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-right">
+<span class="font-['JetBrains_Mono'] text-[11px] text-amber-300 font-medium">4m 12s</span>
+<span class="material-symbols-outlined text-[16px] text-zinc-400" id="subchev-session-ck-1">unfold_more</span>
+</div>
+</div>
+<!-- Expanded Inspection Details (Interactive) -->
+<div class="hidden mt-3 pt-3 border-t border-[#1f2532] flex flex-col gap-2.5" id="session-ck-1">
+<div class="bg-[#0b0d10] p-2.5 rounded border border-[#1b202a] flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] font-['JetBrains_Mono']">
+<span class="text-zinc-500 uppercase tracking-wider">HALTED INVOCATION</span>
+<span class="text-amber-400 font-medium">Awaiting Terminal Auth</span>
+</div>
+<code class="font-['JetBrains_Mono'] text-xs text-zinc-200 bg-[#141820] px-2 py-1.5 rounded block whitespace-pre-wrap break-all border border-[#212836]">terraform destroy -target=module.vpc_peering</code>
+</div>
+<!-- Context telemetry & handover instruction -->
+<div class="grid grid-cols-2 gap-2 text-[11px] font-['JetBrains_Mono']">
+<div class="bg-[#0e1117] p-2 rounded border border-[#1b202a]">
+<span class="text-zinc-500 block">SESSION USAGE</span>
+<span class="text-zinc-200">12.4k tokens Â· $0.18</span>
+</div>
+<div class="bg-[#0e1117] p-2 rounded border border-[#1b202a]">
+<span class="text-zinc-500 block">BRANCH</span>
+<span class="text-zinc-200">feat/vpc-cleanup</span>
+</div>
+</div>
+<!-- Read-only observer action routing notice -->
+<div class="flex items-center justify-between px-2.5 py-1.5 rounded bg-[#161a22] border border-[#232936] text-[11px] text-zinc-400">
+<div class="flex items-center gap-1.5 truncate">
+<span class="material-symbols-outlined text-[14px] text-amber-400 shrink-0">terminal</span>
+<span class="truncate">Execute resolution on <span class="text-zinc-200 font-medium">studio-mbp : Terminal 2</span></span>
+</div>
+<span class="text-[10px] font-['JetBrains_Mono'] text-zinc-500 shrink-0">OBSERVE ONLY</span>
+</div>
+</div>
+</div>
+<!-- Session: Settled in this repo -->
+<div class="px-3 py-2.5 flex items-center justify-between text-xs hover:bg-[#141720] transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-zinc-600 shrink-0"></span>
+<div class="min-w-0 flex items-center gap-2">
+<span class="font-['JetBrains_Mono'] text-zinc-400">Claude Code</span>
+<span class="text-zinc-500 truncate">docs-generator: synced OpenAPI spec definitions</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 font-['JetBrains_Mono'] text-[11px] text-zinc-500">
+<span>Clean Exit (0)</span>
+<span>Â·</span>
+<span>2m ago</span>
+</div>
+</div>
+</div>
+</section>
+<!-- PROJECT 2: auth-service/v2 (Attention Required) -->
+<section class="project-card rounded-lg bg-[#11141a] border border-[#1e232c] overflow-hidden transition-all duration-150" data-has-action="true" data-project="auth-service/v2">
+<div class="cursor-pointer px-3.5 py-3 flex items-center justify-between hover:bg-[#151922] transition-colors border-b border-[#1b2029]" onclick="toggleProject('auth-service-v2')">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-[17px] text-zinc-400 shrink-0">folder_open</span>
+<div class="flex items-center gap-2 truncate">
+<span class="font-['JetBrains_Mono'] text-xs font-semibold text-zinc-100 truncate">auth-service/v2</span>
+<span class="text-[10px] font-['JetBrains_Mono'] px-1.5 py-0.2 rounded bg-amber-950/40 text-amber-300 border border-amber-800/40">1 AWAITING INPUT</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-['JetBrains_Mono'] text-[11px] text-zinc-400">1 session</span>
+<span class="material-symbols-outlined text-[18px] text-zinc-400 transition-transform duration-200" id="chevron-auth-service-v2">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#181d26]" id="content-auth-service-v2">
+<div class="p-3 bg-[#13161e]/50 hover:bg-[#151922] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-auth-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<span class="mt-1 relative flex h-2 w-2 shrink-0">
+<span class="status-ping-amber"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+</span>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="text-xs font-medium text-zinc-100 font-['JetBrains_Mono']">OpenCode</span>
+<span class="text-[11px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-['JetBrains_Mono'] font-medium">Waiting for Input</span>
+<span class="text-[10px] text-zinc-500 font-['JetBrains_Mono']">+42/-14 lines</span>
+</div>
+<p class="text-xs text-zinc-300 mt-0.5 truncate">Filesystem mutation: pkg/auth/jwt.go signature rewrite</p>
+</div>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-right">
+<span class="font-['JetBrains_Mono'] text-[11px] text-amber-300 font-medium">1m 40s</span>
+<span class="material-symbols-outlined text-[16px] text-zinc-400" id="subchev-session-auth-1">unfold_more</span>
+</div>
+</div>
+<!-- Expanded details -->
+<div class="hidden mt-3 pt-3 border-t border-[#1f2532] flex flex-col gap-2.5" id="session-auth-1">
+<div class="bg-[#0b0d10] p-2.5 rounded border border-[#1b202a] flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] font-['JetBrains_Mono']">
+<span class="text-zinc-500 uppercase tracking-wider">PENDING FILE MUTATION</span>
+<span class="text-zinc-400">diff stats: +42 / -14 lines</span>
+</div>
+<code class="font-['JetBrains_Mono'] text-xs text-zinc-200 bg-[#141820] px-2 py-1.5 rounded block truncate border border-[#212836]">pkg/auth/jwt.go : ValidateTokenClaims()</code>
+</div>
+<div class="flex items-center justify-between px-2.5 py-1.5 rounded bg-[#161a22] border border-[#232936] text-[11px] text-zinc-400">
+<div class="flex items-center gap-1.5 truncate">
+<span class="material-symbols-outlined text-[14px] text-amber-400 shrink-0">difference</span>
+<span class="truncate">Review diff in <span class="text-zinc-200 font-medium">VS Code: auth-service</span></span>
+</div>
+<span class="text-[10px] font-['JetBrains_Mono'] text-zinc-500 shrink-0">WORKSPACE</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- PROJECT 3: payment-router (Active In-Flight) -->
+<section class="project-card rounded-lg bg-[#11141a] border border-[#1e232c] overflow-hidden transition-all duration-150" data-has-action="false" data-project="payment-router">
+<div class="cursor-pointer px-3.5 py-3 flex items-center justify-between hover:bg-[#151922] transition-colors border-b border-[#1b2029]" onclick="toggleProject('payment-router')">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-[17px] text-zinc-400 shrink-0">folder_open</span>
+<div class="flex items-center gap-2 truncate">
+<span class="font-['JetBrains_Mono'] text-xs font-semibold text-zinc-100 truncate">payment-router</span>
+<span class="text-[10px] font-['JetBrains_Mono'] px-1.5 py-0.2 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/40">RUNNING</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-['JetBrains_Mono'] text-[11px] text-zinc-400">1 session</span>
+<span class="material-symbols-outlined text-[18px] text-zinc-400 transition-transform duration-200" id="chevron-payment-router">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#181d26]" id="content-payment-router">
+<div class="p-3 hover:bg-[#151922] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-pr-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<span class="mt-1 relative flex h-2 w-2 shrink-0">
+<span class="status-ping-emerald"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+</span>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="text-xs font-medium text-zinc-100 font-['JetBrains_Mono']">Antigravity</span>
+<span class="text-[11px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 font-['JetBrains_Mono'] font-medium">Running</span>
+<span class="text-[10px] text-zinc-500 font-['JetBrains_Mono']">2 runners</span>
+</div>
+<p class="text-xs text-zinc-300 mt-0.5 truncate">Running test suite Â· concurrency race detection</p>
+</div>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-right">
+<span class="font-['JetBrains_Mono'] text-[11px] text-emerald-300 font-medium">3m 18s</span>
+<span class="material-symbols-outlined text-[16px] text-zinc-400" id="subchev-session-pr-1">unfold_more</span>
+</div>
+</div>
+<!-- Expanded details for Antigravity -->
+<div class="hidden mt-3 pt-3 border-t border-[#1f2532] flex flex-col gap-2.5" id="session-pr-1">
+<div class="bg-[#0b0d10] p-2.5 rounded border border-[#1b202a] flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] font-['JetBrains_Mono']">
+<span class="text-zinc-500 uppercase tracking-wider">COMMAND INVOCATION</span>
+<span class="text-zinc-400">PID 18024</span>
+</div>
+<code class="font-['JetBrains_Mono'] text-xs text-emerald-200/90 bg-[#141820] px-2 py-1.5 rounded block truncate border border-[#212836]">go test -v -race ./internal/ledger/...</code>
+</div>
+<div class="grid grid-cols-2 gap-2 text-[11px] font-['JetBrains_Mono']">
+<div class="bg-[#0e1117] p-2 rounded border border-[#1b202a]">
+<span class="text-zinc-500 block">SUB-WORKERS</span>
+<span class="text-zinc-200">test-db-spinup, mock-stripe</span>
+</div>
+<div class="bg-[#0e1117] p-2 rounded border border-[#1b202a]">
+<span class="text-zinc-500 block">RESOURCE USAGE</span>
+<span class="text-zinc-200">$0.42 API Â· 1.4 GB RAM</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- PROJECT 4: web-frontend (Active Refactoring Step) -->
+<section class="project-card rounded-lg bg-[#11141a] border border-[#1e232c] overflow-hidden transition-all duration-150" data-has-action="false" data-project="web-frontend">
+<div class="cursor-pointer px-3.5 py-3 flex items-center justify-between hover:bg-[#151922] transition-colors border-b border-[#1b2029]" onclick="toggleProject('web-frontend')">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-[17px] text-zinc-400 shrink-0">folder_open</span>
+<div class="flex items-center gap-2 truncate">
+<span class="font-['JetBrains_Mono'] text-xs font-semibold text-zinc-100 truncate">web-frontend</span>
+<span class="text-[10px] font-['JetBrains_Mono'] px-1.5 py-0.2 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/40">RUNNING 82%</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-['JetBrains_Mono'] text-[11px] text-zinc-400">1 session</span>
+<span class="material-symbols-outlined text-[18px] text-zinc-400 transition-transform duration-200" id="chevron-web-frontend">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#181d26]" id="content-web-frontend">
+<div class="p-3 hover:bg-[#151922] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-wf-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<span class="mt-1 relative flex h-2 w-2 shrink-0">
+<span class="status-ping-emerald"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+</span>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="text-xs font-medium text-zinc-100 font-['JetBrains_Mono']">Codex</span>
+<span class="text-[11px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 font-['JetBrains_Mono'] font-medium">Refactoring</span>
+<span class="text-[10px] text-zinc-500 font-['JetBrains_Mono']">AST Transform</span>
+</div>
+<p class="text-xs text-zinc-300 mt-0.5 truncate">Rewriting DataTable.tsx to virtual scroll renderer</p>
+<!-- Slim Progress Bar -->
+<div class="w-48 bg-[#1e232d] h-1 rounded-full overflow-hidden mt-1.5">
+<div class="bg-emerald-400 h-full w-[82%] rounded-full"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-right">
+<span class="font-['JetBrains_Mono'] text-[11px] text-emerald-300 font-medium">42s</span>
+<span class="material-symbols-outlined text-[16px] text-zinc-400" id="subchev-session-wf-1">unfold_more</span>
+</div>
+</div>
+<div class="hidden mt-3 pt-3 border-t border-[#1f2532] flex flex-col gap-2.5" id="session-wf-1">
+<div class="grid grid-cols-2 gap-2 text-[11px] font-['JetBrains_Mono']">
+<div class="bg-[#0e1117] p-2 rounded border border-[#1b202a]">
+<span class="text-zinc-500 block">CONSUMED TOKENS</span>
+<span class="text-zinc-200">18.4k tokens Â· $0.11</span>
+</div>
+<div class="bg-[#0e1117] p-2 rounded border border-[#1b202a]">
+<span class="text-zinc-500 block">TARGET FILE</span>
+<span class="text-zinc-200 truncate block">components/DataTable.tsx</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- PROJECT 5: data-pipeline/etl (Cargo compilation + History) -->
+<section class="project-card rounded-lg bg-[#11141a] border border-[#1e232c] overflow-hidden transition-all duration-150" data-has-action="false" data-project="data-pipeline/etl">
+<div class="cursor-pointer px-3.5 py-3 flex items-center justify-between hover:bg-[#151922] transition-colors border-b border-[#1b2029]" onclick="toggleProject('data-pipeline-etl')">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-[17px] text-zinc-400 shrink-0">folder_open</span>
+<div class="flex items-center gap-2 truncate">
+<span class="font-['JetBrains_Mono'] text-xs font-semibold text-zinc-100 truncate">data-pipeline/etl</span>
+<span class="text-[10px] font-['JetBrains_Mono'] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">1 RUNNING Â· 1 SETTLED</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-['JetBrains_Mono'] text-[11px] text-zinc-400">2 sessions</span>
+<span class="material-symbols-outlined text-[18px] text-zinc-400 transition-transform duration-200" id="chevron-data-pipeline-etl">expand_more</span>
+</div>
+</div>
+<div class="divide-y divide-[#181d26]" id="content-data-pipeline-etl">
+<!-- Active session -->
+<div class="p-3 hover:bg-[#151922] transition-colors">
+<div class="cursor-pointer flex items-start justify-between gap-2" onclick="toggleDetails('session-dp-1')">
+<div class="flex items-start gap-2.5 min-w-0">
+<span class="mt-1 relative flex h-2 w-2 shrink-0">
+<span class="status-ping-emerald"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+</span>
+<div class="min-w-0">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="text-xs font-medium text-zinc-100 font-['JetBrains_Mono']">Terminal Agent</span>
+<span class="text-[11px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 font-['JetBrains_Mono'] font-medium">Compiling</span>
+<span class="text-[10px] text-zinc-500 font-['JetBrains_Mono']">148/212 crates</span>
+</div>
+<p class="text-xs text-zinc-300 mt-0.5 truncate">cargo build --release --bin ingest</p>
+</div>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 text-right">
+<span class="font-['JetBrains_Mono'] text-[11px] text-emerald-300 font-medium">1m 55s</span>
+<span class="material-symbols-outlined text-[16px] text-zinc-400" id="subchev-session-dp-1">unfold_more</span>
+</div>
+</div>
+<div class="hidden mt-3 pt-3 border-t border-[#1f2532] flex flex-col gap-2.5" id="session-dp-1">
+<div class="bg-[#0b0d10] p-2 rounded border border-[#1b202a] text-[11px] font-['JetBrains_Mono'] text-zinc-400">
+<div class="flex justify-between pb-1">
+<span>TARGET: x86_64-linux-gnu</span>
+<span class="text-zinc-300">PID 44812</span>
+</div>
+<div class="text-zinc-500">Host: studio-mbp.mesh (Tailscale local node)</div>
+</div>
+</div>
+</div>
+<!-- Settled session -->
+<div class="px-3 py-2.5 flex items-center justify-between text-xs hover:bg-[#141720] transition-colors">
+<div class="flex items-center gap-2.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-zinc-600 shrink-0"></span>
+<div class="min-w-0 flex items-center gap-2">
+<span class="font-['JetBrains_Mono'] text-zinc-400">OpenCode</span>
+<span class="text-zinc-500 truncate">cron-scheduler: failed libpq-dev (Exit 127)</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 font-['JetBrains_Mono'] text-[11px] text-zinc-500">
+<span class="text-zinc-400">Trace Available</span>
+<span>Â·</span>
+<span>8m ago</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Clean Streamlined Engineering Footer -->
+<footer class="fixed bottom-0 inset-x-0 z-40 pb-safe bg-[#0b0d10]/95 backdrop-blur-md border-t border-[#1b1f26]">
+<div class="px-4 py-2.5 max-w-2xl mx-auto flex items-center justify-between text-xs font-['JetBrains_Mono'] text-zinc-400">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="text-zinc-300 font-medium">AUX-01 FEED</span>
+<span class="text-zinc-600">|</span>
+<span class="text-zinc-500">Live Telemetry Mode</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors" onclick="expandAll()">Expand All</button>
+<span class="text-zinc-600">Â·</span>
+<button class="text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors" onclick="collapseAll()">Collapse</button>
+</div>
+</div>
+</footer>
+<script>
+    // Expand/Collapse project container
+    function toggleProject(id) {
+      const content = document.getElementById('content-' + id);
+      const chevron = document.getElementById('chevron-' + id);
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        chevron.style.transform = 'rotate(0deg)';
+      } else {
+        content.classList.add('hidden');
+        chevron.style.transform = 'rotate(-90deg)';
+      }
+    }
+
+    // Toggle detailed inspection drawers
+    function toggleDetails(id) {
+      const detail = document.getElementById(id);
+      const chevron = document.getElementById('subchev-' + id);
+      if (detail.classList.contains('hidden')) {
+        detail.classList.remove('hidden');
+        if (chevron) chevron.innerText = 'unfold_less';
+      } else {
+        detail.classList.add('hidden');
+        if (chevron) chevron.innerText = 'unfold_more';
+      }
+    }
+
+    // Expand / Collapse all convenience functions
+    function expandAll() {
+      document.querySelectorAll('[id^="content-"]').forEach(el => el.classList.remove('hidden'));
+      document.querySelectorAll('[id^="chevron-"]').forEach(el => el.style.transform = 'rotate(0deg)');
+      document.querySelectorAll('[id^="session-"]').forEach(el => el.classList.remove('hidden'));
+    }
+
+    function collapseAll() {
+      document.querySelectorAll('[id^="session-"]').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('[id^="subchev-"]').forEach(el => el.innerText = 'unfold_more');
+    }
+
+    // Search and filter interactivity
+    const searchInput = document.getElementById('projectSearchInput');
+    const filterAllBtn = document.getElementById('filterAllBtn');
+    const filterAttentionBtn = document.getElementById('filterAttentionBtn');
+    let onlyAttention = false;
+
+    function applyFilters() {
+      const query = (searchInput.value || '').toLowerCase().trim();
+      const cards = document.querySelectorAll('.project-card');
+
+      cards.forEach(card => {
+        const projectName = card.getAttribute('data-project').toLowerCase();
+        const cardText = card.innerText.toLowerCase();
+        const hasAction = card.getAttribute('data-has-action') === 'true';
+
+        const matchesQuery = !query || projectName.includes(query) || cardText.includes(query);
+        const matchesAction = !onlyAttention || hasAction;
+
+        if (matchesQuery && matchesAction) {
+          card.classList.remove('hidden');
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilters);
+    }
+
+    if (filterAllBtn && filterAttentionBtn) {
+      filterAllBtn.addEventListener('click', () => {
+        onlyAttention = false;
+        filterAllBtn.className = "px-2 py-1 rounded bg-[#202530] text-zinc-200 font-medium";
+        filterAttentionBtn.className = "px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#171b22] transition-colors";
+        applyFilters();
+      });
+
+      filterAttentionBtn.addEventListener('click', () => {
+        onlyAttention = true;
+        filterAttentionBtn.className = "px-2 py-1 rounded bg-[#202530] text-amber-300 font-medium";
+        filterAllBtn.className = "px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#171b22] transition-colors";
+        applyFilters();
+      });
+    }
+  </script>
+</body></html>

@@ -38,6 +38,7 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         requireAuthForNonLoopback: false
       });
 
+      if (viewport.width >= 1200) engine.state.prefs.columns = 3;
       const now = Date.now();
 
       // Seed 4 sessions across sources, including 1 in `waiting` and 1 `running`
@@ -177,6 +178,15 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         // 1b. Phone-first guard: no sideways scroll, no clipped nav tabs
         await expectNoHorizontalOverflow(page);
 
+        await page.screenshot({ path: 'test-results/redesign-' + viewport.width + '.png', fullPage: true });
+        await page.getByRole('button', { name: /Needs Attention/ }).click();
+        await expect(cards).toHaveCount(1);
+        await expect(cards.first()).toHaveAttribute('data-run-status', 'waiting');
+        await page.getByRole('button', { name: /^Running/ }).click();
+        await expect(cards).toHaveCount(2);
+        await page.getByRole('button', { name: /All Projects/ }).click();
+        await expect(cards).toHaveCount(3);
+
         // 2. Verify motion budget rule (§8.5): at most 2 animated elements on screen at rest
         const animatedCount = await page.locator('.animate-pulse-running, .animate-pulse-waiting, .animate-breathe-waiting').count();
         expect(animatedCount).toBeLessThanOrEqual(2);
@@ -193,6 +203,7 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         await expect(page.getByTestId('deck-view')).toBeVisible();
 
         // 4. Switch to Usage view and verify persistence across reload
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByTestId('nav-usage').click();
         await expect(page.getByTestId('usage-view')).toBeVisible();
         await expectNoHorizontalOverflow(page);
@@ -201,12 +212,14 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         await expectNoHorizontalOverflow(page);
 
         // 5. Switch to Ledger view
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByTestId('nav-ledger').click();
         await expect(page.getByTestId('ledger-view')).toBeVisible();
         await expect(page.getByTestId('ledger-view')).toContainText('ProdigyR4Apps');
         await expectNoHorizontalOverflow(page);
 
         // 6. Switch to Ambient view
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByTestId('nav-ambient').click();
         await expect(page.getByTestId('ambient-view')).toBeVisible();
         await expect(page.getByTestId('ambient-view')).toContainText("Today's Tokens");
