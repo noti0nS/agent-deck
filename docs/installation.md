@@ -5,7 +5,7 @@ only after choosing Tailscale or private-LAN access as described below.
 
 ## From source
 
-Install Git, Node.js 22.17+ or 24, npm 10+, and Go 1.22+.
+Install Git, Node.js 22.22+ or 24, npm 10+, and Go 1.22+.
 
 ```sh
 git clone https://github.com/noti0nS/agent-deck.git
@@ -41,7 +41,7 @@ between machines. Installation requires network access to dependency registries.
 
 When a release is published, download its archive matching your OS and CPU from
 [GitHub Releases](https://github.com/noti0nS/agent-deck/releases). Extract it, install
-Node 22.17+ or 24, then run:
+Node 22.22+ or 24, then run:
 
 ```sh
 npm ci --omit=dev

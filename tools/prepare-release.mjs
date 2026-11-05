@@ -46,7 +46,7 @@ for (const path of Object.keys(lock.packages).sort()) {
   }
 }
 writeFileSync(join(output, 'THIRD_PARTY_NOTICES.txt'), notices.join('\n'));
-writeFileSync(join(output, 'INSTALL.txt'), `Agent Deck experimental release (${process.platform}/${process.arch})\n\nInstall Node.js 22.17+ or 24, then run in this directory:\n  npm ci --omit=dev\n  node apps/collector/dist/cli.js start\n\nOpen http://127.0.0.1:4100\nNo Go or TypeScript build is needed. Native Node modules may require a C++ toolchain if a prebuilt binary is unavailable.\nSee docs/installation.md and docs/privacy.md before enabling network access.\n`);
+writeFileSync(join(output, 'INSTALL.txt'), `Agent Deck experimental release (${process.platform}/${process.arch})\n\nInstall Node.js 22.22+ or 24, then run in this directory:\n  npm ci --omit=dev\n  node apps/collector/dist/cli.js start\n\nOpen http://127.0.0.1:4100\nNo Go or TypeScript build is needed. Native Node modules may require a C++ toolchain if a prebuilt binary is unavailable.\nSee docs/installation.md and docs/privacy.md before enabling network access.\n`);
 const hashes = [];
 function walk(dir, prefix = '') {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

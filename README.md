@@ -11,7 +11,7 @@ change their work. Native hook installation is explicit and reversible.
 
 ## Quick start
 
-Requirements: Git, **Node.js 22.17+ or 24**, npm 10+, and Go 1.22+ for the hook shim.
+Requirements: Git, **Node.js 22.22+ or 24**, npm 10+, and Go 1.22+ for the hook shim.
 Native Node modules may require a C++ toolchain if prebuilt binaries are unavailable.
 
 ```sh

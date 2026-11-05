@@ -1,6 +1,6 @@
 Agent Deck is an experimental local dashboard for AI coding sessions.
 
-Download the archive for your OS/CPU, extract it, install Node.js 22.17+ or 24,
+Download the archive for your OS/CPU, extract it, install Node.js 22.22+ or 24,
 and run `npm ci --omit=dev` followed by `node apps/collector/dist/cli.js start`.
 The bundle includes the dashboard and hook shim; Go and a TypeScript build are
 not needed. Native Node dependencies may need a C++ toolchain.

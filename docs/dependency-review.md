@@ -6,7 +6,19 @@ a permanent assurance about future advisories.
 The public-release preparation upgraded Fastify static serving, Zod, Vitest,
 SvelteKit and its build toolchain to address the reported moderate/high/critical
 advisories. SvelteKit 3 required Vite plugin configuration, subpath imports and
-the new service-worker module layout. Node 22.17+ or 24 is required.
+the new service-worker module layout. Node 22.22+ or 24 is required.
+
+## November 5 dependency integration
+
+The Dependabot updates were integrated together: SQLite 13, Chokidar 6,
+Fastify cookie 11.1.5, Svelte 5.57.3, svelte-check 4.7.8, TypeScript 7,
+and the GitHub Actions major-version updates.
+
+Chokidar 6 raises the Node 22 minimum to 22.22. TypeScript 7 builds the
+collector and shared packages. The web workspace keeps TypeScript 6.0.3
+because SvelteKit 3.1.1 and svelte-check 4.7.8 require the TypeScript 6 API
+and peer range. Do not force TypeScript 7 into that workspace until both
+upstream tools support it.
 
 ## Remaining upstream advisory
 
