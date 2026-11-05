@@ -18,7 +18,7 @@
     "@agent-deck/pricing": "*",
     "@agent-deck/protocol": "*",
     "@agent-deck/redact": "*",
-    "@fastify/cookie": "^11.0.2",
+    "@fastify/cookie": "^11.1.5",
     "@fastify/static": "^10.1.10",
     "better-sqlite3": "^11.8.1",
     "chokidar": "^4.0.3",
