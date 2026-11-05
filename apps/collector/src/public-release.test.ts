@@ -109,6 +109,9 @@ it('revocation closes an already connected LAN event stream', async () => {
 it('pair in another terminal uses persisted LAN address and refuses a missing listener', async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'agent-deck-pair-test-'));
   const dbPath = join(scratch, 'test.db');
+  const configured = new CollectorStore(dbPath);
+  configured.setSetting('provider_setup', { version: 1, providers: [] });
+  configured.close();
   vi.stubEnv('AGENT_DECK_DB_PATH', dbPath);
   vi.stubEnv('AGENT_DECK_LAN_HOST', '');
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});

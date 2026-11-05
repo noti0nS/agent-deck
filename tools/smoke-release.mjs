@@ -23,6 +23,10 @@ import { spawn, spawnSync } from 'node:child_process';
 import { CollectorEngine, buildHttpServer } from './apps/collector/dist/http.js';
 import { CollectorStore } from './apps/collector/dist/store.js';
 const store = new CollectorStore(':memory:');
+const cliDbPath = fileURLToPath(new URL('./smoke-config.db', import.meta.url));
+const cliConfig = new CollectorStore(cliDbPath);
+cliConfig.setSetting('provider_setup', { version: 1, providers: [] });
+cliConfig.close();
 const engine = new CollectorEngine({ store });
 const app = await buildHttpServer(engine, { staticDir: fileURLToPath(new URL('./apps/web/build', import.meta.url)) });
 let collectorPort;
@@ -40,7 +44,7 @@ try {
   const hook = spawnSync(fileURLToPath(new URL(shim, import.meta.url)), [], { input: '', timeout: 2000 });
   assert.equal(hook.status, 0);
   const cli = spawn(process.execPath, ['apps/collector/dist/cli.js', 'status'], {
-    env: { ...process.env, AGENT_DECK_HOST: '127.0.0.1', AGENT_DECK_PORT: String(port) }, stdio: 'inherit'
+    env: { ...process.env, AGENT_DECK_DB_PATH: cliDbPath, AGENT_DECK_HOST: '127.0.0.1', AGENT_DECK_PORT: String(port) }, stdio: 'inherit'
   });
   const code = await new Promise((resolve, reject) => { cli.once('error', reject); cli.once('exit', resolve); });
   assert.equal(code, 0);
@@ -51,7 +55,7 @@ try {
   store.close();
 }
 const offline = spawnSync(process.execPath, ['apps/collector/dist/cli.js', 'status'], {
-  env: { ...process.env, AGENT_DECK_HOST: '127.0.0.1', AGENT_DECK_PORT: String(collectorPort) }, encoding: 'utf8', timeout: 5000
+  env: { ...process.env, AGENT_DECK_DB_PATH: cliDbPath, AGENT_DECK_HOST: '127.0.0.1', AGENT_DECK_PORT: String(collectorPort) }, encoding: 'utf8', timeout: 5000
 });
 assert.equal(offline.status, 1, offline.stdout + offline.stderr);
 console.log('Offline CLI exit status and native shim also passed.');

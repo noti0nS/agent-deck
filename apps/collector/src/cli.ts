@@ -27,6 +27,7 @@ import { CollectorStore } from './store.js';
 import { ModelCatalogSync } from './model-catalog.js';
 import { runMcp } from './mcp.js';
 import { collectorPort, collectorUrl, checkCollector, privateLanUrl, type LanListener } from './config.js';
+import { readProviderSetup, setupProviders, type Provider } from './provider-setup.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -38,9 +39,54 @@ export function getDefaultWebBuildDir(): string {
   return resolve(__dirname, '..', '..', 'web', 'build');
 }
 
+export function createProviderAdapters(providers: Provider[], enableAgyRemoteControl = false) {
+  return providers.map(provider => {
+    switch (provider) {
+      case 'opencode': return new OpenCodeAdapter();
+      case 'claude': return new ClaudeAdapter();
+      case 'codex': return new CodexAdapter();
+      case 'agy': return new AgyAdapter({ enableRemoteControl: enableAgyRemoteControl });
+    }
+  });
+}
+
+const usage = `Usage: agent-deck <start|status|doctor|setup|probe|devices|uninstall|pair|run|import|mcp>
+From source: npm run agent-deck doctor (no -- separator needed for commands).
+First run asks which providers to enable. Run setup again to change them.
+Non-interactive: npm run agent-deck setup providers codex,opencode (or none).
+Hook repair: setup claude / setup agy. Network access: setup tailscale.
+Help and doctor are always available without setup.`;
+
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
-  const cmd = argv[0] || 'status';
+  const cmd = argv[0] || 'start';
   const args = argv.slice(1);
+  if (['help', '--help', '-h'].includes(cmd) || args.includes('--help')) { console.log(usage); return 0; }
+  if (!['start', 'status', 'doctor', 'setup', 'probe', 'devices', 'uninstall', 'pair', 'run', 'import', 'mcp'].includes(cmd)) {
+    console.error(`Unknown command: ${cmd}\n${usage}`); return 1;
+  }
+  if (cmd === 'setup' && args[0] && !['providers', 'claude', 'agy', 'tailscale'].includes(args[0])) {
+    console.error(usage); return 1;
+  }
+  const shimName = process.platform === 'win32' ? 'agent-deck-hook.exe' : 'agent-deck-hook';
+  const commandPath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', shimName);
+  let providers: Provider[] = [];
+  const providerWizard = cmd === 'setup' && (!args[0] || args[0] === 'providers');
+  // Diagnostics, help, and explicit hook maintenance must remain usable when setup is broken.
+  if (cmd !== 'doctor' && cmd !== 'uninstall' && (cmd !== 'setup' || providerWizard)) {
+    const configStore = new CollectorStore(getDefaultCollectorDbPath());
+    try {
+      if (providerWizard) {
+        if (args[0] === 'providers' && (!args[1] || args.length !== 2)) throw new Error('Usage: agent-deck setup providers codex,opencode (or none)');
+        return await setupProviders(configStore, commandPath, args[1]) ? 0 : 1;
+      }
+      let setup = readProviderSetup(configStore);
+      if (!setup) {
+        if (!await setupProviders(configStore, commandPath)) return 1;
+        setup = readProviderSetup(configStore)!;
+      }
+      providers = setup.providers;
+    } finally { configStore.close(); }
+  }
   if (cmd === 'mcp') { await runMcp(); return 0; }
 
   if (cmd === 'devices') {
@@ -71,6 +117,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   if (cmd === 'probe') {
     const srcIdx = args.indexOf('--source');
     const source = (srcIdx >= 0 ? args[srcIdx + 1] : args[0] || 'opencode') as Source;
+    if (source !== 'pty' && !providers.includes(source as Provider)) throw new Error(`Provider ${source} is disabled. Run setup to enable it.`);
     const tailIdx = args.indexOf('--tail');
     const tail = tailIdx >= 0 ? Math.max(1, Number(args[tailIdx + 1]) || 20) : 20;
 
@@ -203,7 +250,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
     const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
-    const res = runHistoryBackfill(engine);
+    const res = runHistoryBackfill(engine, { providers });
     console.log(
       `History backfill complete in ${res.durationMs}ms: opencode=${res.opencodeSessions}, claudeLines=${res.claudeLines}, codexLines=${res.codexLines}, agy=${res.agyConversations}`
     );
@@ -271,14 +318,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     });
 
     // Bootstrap first-run 90-day history backfill if not yet run (§7.3)
-    if (process.env.AGENT_DECK_IMPORT_HISTORY !== '0' && !store.getSetting('last_history_import')) {
-      runHistoryBackfill(engine);
+    const importedProviders = store.getSetting<{ providers?: Provider[] }>('last_history_import')?.providers ?? [];
+    const pendingProviders = providers.filter(provider => !importedProviders.includes(provider));
+    if (process.env.AGENT_DECK_IMPORT_HISTORY !== '0' && pendingProviders.length) {
+      runHistoryBackfill(engine, { providers: pendingProviders });
     }
 
-    engine.registerAdapter(new OpenCodeAdapter());
-    engine.registerAdapter(new ClaudeAdapter());
-    engine.registerAdapter(new CodexAdapter());
-    engine.registerAdapter(new AgyAdapter({ enableRemoteControl: engine.state.prefs.enableAgyRemoteControl }));
+    for (const adapter of createProviderAdapters(providers, engine.state.prefs.enableAgyRemoteControl)) engine.registerAdapter(adapter);
     engine.registerAdapter(new PtyAdapter());
     await engine.startAdapters();
 
@@ -314,7 +360,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     return 0;
   }
 
-  console.log(`Usage: agent-deck <start|status|doctor|probe|setup claude|setup agy|setup tailscale|devices list|devices revoke ID|devices revoke-all|uninstall [claude|agy]|pair|run|import|mcp>`);
+  console.log(usage);
   return 0;
 }
 

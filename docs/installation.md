@@ -12,10 +12,24 @@ git clone https://github.com/noti0nS/agent-deck.git
 cd agent-deck
 npm ci
 npm run build
-npm run agent-deck -- start
+npm run agent-deck start
 ```
 
 Open http://127.0.0.1:4100. Keep the terminal running; Ctrl+C stops the process.
+The first run asks which providers to enable. Use arrows and Space to select,
+then Enter to save. Selecting Claude Code or Antigravity installs their observer
+hooks; reopen those agents afterward. OpenCode and Codex need no hook setup.
+Only selected providers are observed and imported. Existing stored history is
+retained when you disable a provider. Run `npm run agent-deck setup` to change
+the selection, then restart a running collector. Deselecting Claude or
+Antigravity removes only Agent Deck's hooks.
+
+`npm run agent-deck doctor` and `npm run agent-deck help` bypass first-run setup.
+For unattended use, first run `npm run agent-deck setup providers codex,opencode`
+(choose your comma-separated provider IDs, or `none`), then start normally.
+Selections are stored with the collector database, so use the same
+`AGENT_DECK_DB_PATH` for setup and startup. Existing installations without a
+saved selection also get the wizard on their next interactive run.
 On Windows, use `npm.cmd` if PowerShell execution policy blocks `npm`.
 No paid API key is needed by Agent Deck; the agents you monitor have their own
 installation, login and billing requirements.
@@ -60,7 +74,7 @@ in place of `npm run agent-deck --` for the commands below when using a bundle.
 running on its default loopback address, explicitly configure Serve once:
 
 ```sh
-npm run agent-deck -- setup tailscale
+npm run agent-deck setup tailscale
 ```
 
 Open the HTTPS URL printed by setup. No Agent Deck pairing is needed: tailnet
@@ -79,14 +93,14 @@ Do not enable Funnel or another public proxy.
 On Ubuntu:
 
 ```sh
-AGENT_DECK_LAN_HOST=192.168.1.23 npm run agent-deck -- start
+AGENT_DECK_LAN_HOST=192.168.1.23 npm run agent-deck start
 ```
 
 Replace the example address with your own. Allow inbound TCP on the configured
 port only from your private subnet. In another terminal in this checkout:
 
 ```sh
-npm run agent-deck -- pair
+npm run agent-deck pair
 ```
 
 The collector records its LAN address, so the second terminal does not need to
@@ -102,11 +116,11 @@ and service-worker functionality require HTTPS (or localhost on the PC).
 ## Device access and diagnostics
 
 ```sh
-npm run agent-deck -- status
-npm run agent-deck -- doctor
-npm run agent-deck -- devices list
-npm run agent-deck -- devices revoke DEVICE_ID
-npm run agent-deck -- devices revoke-all
+npm run agent-deck status
+npm run agent-deck doctor
+npm run agent-deck devices list
+npm run agent-deck devices revoke DEVICE_ID
+npm run agent-deck devices revoke-all
 ```
 
 `status` uses the configured host/port and returns 1 when offline. `doctor` probes
@@ -127,8 +141,8 @@ directory and install its dependencies. Hook paths are absolute: uninstall old
 hooks before moving/deleting the old install, then install hooks from the new one.
 
 ```sh
-npm run agent-deck -- uninstall claude
-npm run agent-deck -- uninstall agy
+npm run agent-deck uninstall claude
+npm run agent-deck uninstall agy
 ```
 
 These commands remove only Agent Deck hook entries. Remove the installed Serve

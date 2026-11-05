@@ -19,11 +19,17 @@ git clone https://github.com/noti0nS/agent-deck.git
 cd agent-deck
 npm ci
 npm run build
-npm run agent-deck -- start
+npm run agent-deck start
 ```
 
+On first run, select the providers you want to enable (arrows to move, Space to
+toggle, Enter to save). Detected providers are suggested; you can select none.
+Claude Code and Antigravity selections install their observer hooks automatically;
+reopen those agents afterward. Other providers need no hooks. Run
+`npm run agent-deck setup` to change your selection later, then restart the collector.
+
 Open <http://127.0.0.1:4100>. On Windows use `npm.cmd` if PowerShell blocks `npm`.
-The first start imports up to 90 days of available history into a local SQLite
+The first start imports up to 90 days of history from enabled providers into a local SQLite
 DB. Set `AGENT_DECK_IMPORT_HISTORY=0` to skip bulk backfill. Current/recent agent
 records may still be observed. Read [privacy](docs/privacy.md) before sharing access.
 
@@ -34,7 +40,7 @@ but no Go/TypeScript build. See [installation](docs/installation.md).
 ## Tablet access
 
 **Tailscale:** with Tailscale installed and signed in on both devices, run
-`npm run agent-deck -- setup tailscale` and open the printed HTTPS URL. Your
+`npm run agent-deck setup tailscale` and open the printed HTTPS URL. Your
 Tailscale access rules authorize access; no Agent Deck pairing is required.
 Setup refuses to replace a different service on the selected port. Starting the
 collector does not modify Tailscale Serve.
@@ -46,7 +52,7 @@ PC's private IPv4 address. Windows example (replace the address):
 ./start-local-wifi.ps1 -LanAddress 192.168.1.23
 ```
 
-Then run `npm run agent-deck -- pair` in another terminal and scan the QR. It uses
+Then run `npm run agent-deck pair` in another terminal and scan the QR. It uses
 the running collector's recorded LAN address, never localhost. Each code is
 single-use and valid for five minutes. LAN HTTP is for trusted networks; HTTPS
 is required for normal PWA installation. [Detailed setup](docs/installation.md).
@@ -56,7 +62,7 @@ Funnel.
 
 ## Commands
 
-Use `npm run agent-deck -- COMMAND` from source, or
+Use `npm run agent-deck COMMAND` from source, or
 `node apps/collector/dist/cli.js COMMAND` from a runtime bundle.
 
 | Command | Purpose |
@@ -64,6 +70,9 @@ Use `npm run agent-deck -- COMMAND` from source, or
 | `start` | Run collector and dashboard |
 | `status` | Check configured address/port; exit 1 if offline |
 | `doctor` | Report actual collector reachability and adapter diagnostics |
+| `help` | Show CLI usage without running setup |
+| `setup` | Select enabled providers and install/remove their observer hooks |
+| `setup providers codex,opencode` | Save an explicit selection without prompts; use `none` for no providers |
 | `setup claude [--dry-run]` | Install reversible Claude observer hooks |
 | `setup agy [--dry-run]` | Install reversible Antigravity observer hooks |
 | `setup tailscale` | Explicitly configure trusted HTTPS access |
@@ -76,6 +85,11 @@ Use `npm run agent-deck -- COMMAND` from source, or
 | `probe --source AGENT --tail N` | Inspect normalized recent evidence in memory |
 | `run -- CLI [args...]` | Observe an explicitly launched CLI through a PTY |
 | `mcp` | Read-only stdio bridge for an MCP client |
+
+`doctor` and `help` work before setup. Running with no command starts the collector.
+Plain commands need no npm separator: `npm run agent-deck doctor`. To forward
+flags through npm, use `npm run agent-deck -- setup agy --dry-run`.
+Non-interactive first runs require an explicit provider selection before starting.
 
 Build the shim before hook setup. Setup preserves other hook entries, backs up
 settings and rejects malformed configuration. Hooks emit no decisions and exit

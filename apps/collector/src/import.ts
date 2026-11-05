@@ -5,6 +5,7 @@ import { ClaudeAdapter } from './adapters/claude.js';
 import { CodexAdapter } from './adapters/codex.js';
 import { OpenCodeAdapter, type OpenCodeSessionRow } from './adapters/opencode.js';
 import { withReadonlySqlite } from './adapters/readonly-sqlite.js';
+import type { Provider } from './provider-setup.js';
 
 export interface HistoryImportResult {
   opencodeSessions: number;
@@ -22,6 +23,7 @@ export interface HistoryImportResult {
 export function runHistoryBackfill(
   engine: CollectorEngine,
   options?: {
+    providers?: Provider[];
     days?: number;
     maxPerSource?: number;
     opencodeDbPath?: string;
@@ -54,48 +56,56 @@ export function runHistoryBackfill(
   };
 
   // 1. OpenCode backfill
-  const opencode = new OpenCodeAdapter({ dbPath: options?.opencodeDbPath });
-  opencode['ctx'] = ctx;
-  if (existsSync(opencode.dbPath)) {
-    try {
-      withReadonlySqlite(opencode.dbPath, (db) => {
-        const rows = db
-          .prepare(
-            `SELECT id, parent_id, directory, title, agent, model, cost,
-                    tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
-                    time_created, time_updated, time_compacting,
-                    summary_additions, summary_deletions, summary_files
-             FROM session
-             WHERE time_updated >= ?
-             ORDER BY time_updated DESC
-             LIMIT ?`
-          )
-          .all(cutoffTs, maxPerSource) as OpenCodeSessionRow[];
+  if (!options?.providers || options.providers.includes('opencode')) {
+    const opencode = new OpenCodeAdapter({ dbPath: options?.opencodeDbPath });
+    opencode['ctx'] = ctx;
+    if (existsSync(opencode.dbPath)) {
+      try {
+        withReadonlySqlite(opencode.dbPath, (db) => {
+          const rows = db
+            .prepare(
+              `SELECT id, parent_id, directory, title, agent, model, cost,
+                      tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
+                      time_created, time_updated, time_compacting,
+                      summary_additions, summary_deletions, summary_files
+               FROM session
+               WHERE time_updated >= ?
+               ORDER BY time_updated DESC
+               LIMIT ?`
+            )
+            .all(cutoffTs, maxPerSource) as OpenCodeSessionRow[];
 
-        for (const r of rows.reverse()) {
-          opencode.emitSessionRow(db, r, 'inferred', true);
-          opencodeSessions += 1;
-        }
-      });
-    } catch {
-      // ignore
+          for (const r of rows.reverse()) {
+            opencode.emitSessionRow(db, r, 'inferred', true);
+            opencodeSessions += 1;
+          }
+        });
+      } catch {
+        // ignore
+      }
     }
   }
 
   // 2. Claude Code backfill
-  const claude = new ClaudeAdapter({ projectsDir: options?.claudeProjectsDir, udpPort: 0 });
-  claude['ctx'] = ctx;
-  claudeLines = claude.scanTranscripts(maxPerSource);
+  if (!options?.providers || options.providers.includes('claude')) {
+    const claude = new ClaudeAdapter({ projectsDir: options?.claudeProjectsDir, udpPort: 0 });
+    claude['ctx'] = ctx;
+    claudeLines = claude.scanTranscripts(maxPerSource);
+  }
 
   // 3. Codex backfill
-  const codex = new CodexAdapter({ sessionsDir: options?.codexSessionsDir });
-  codex['ctx'] = ctx;
-  codexLines = codex.scanRolloutFiles(maxPerSource);
+  if (!options?.providers || options.providers.includes('codex')) {
+    const codex = new CodexAdapter({ sessionsDir: options?.codexSessionsDir });
+    codex['ctx'] = ctx;
+    codexLines = codex.scanRolloutFiles(maxPerSource);
+  }
 
   // 4. agy backfill
-  const agy = new AgyAdapter({ baseDir: options?.agyBaseDir });
-  agy['ctx'] = ctx;
-  agyConversations = agy.pollConversations(maxPerSource);
+  if (!options?.providers || options.providers.includes('agy')) {
+    const agy = new AgyAdapter({ baseDir: options?.agyBaseDir });
+    agy['ctx'] = ctx;
+    agyConversations = agy.pollConversations(maxPerSource);
+  }
 
   const result: HistoryImportResult = {
     opencodeSessions,
@@ -107,6 +117,10 @@ export function runHistoryBackfill(
 
   engine.store.setSetting('last_history_import', {
     ...result,
+    providers: [...new Set([
+      ...(engine.store.getSetting<{ providers?: Provider[] }>('last_history_import')?.providers ?? []),
+      ...(options?.providers ?? ['opencode', 'claude', 'codex', 'agy'])
+    ])],
     importedAt: Date.now()
   });
 
