@@ -9,7 +9,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const root = resolve(import.meta.dirname, '..');
 const { name, version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-const tarball = join(root, '.release', 'npm', `${name}-${version}.tgz`);
+const tarballName = `${name.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
+const tarball = join(root, '.release', 'npm', tarballName);
 if (!existsSync(tarball)) throw new Error('Run npm run release:npm first.');
 if (!process.env.npm_execpath) throw new Error('Run through npm run release:npm:smoke.');
 const temp = process.platform === 'win32' && process.env.LOCALAPPDATA

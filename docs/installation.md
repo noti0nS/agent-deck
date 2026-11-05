@@ -8,7 +8,7 @@ only after choosing Tailscale or private-LAN access as described below.
 Once the first npm release is published:
 
 ```sh
-npm install -g agent-deck
+npm install -g @noti0ns/agent-deck
 agent-deck --version
 agent-deck start
 ```
@@ -31,7 +31,7 @@ Windows; the `bin` directory under that prefix on Linux), then open a new termin
 Stop the collector before updating:
 
 ```sh
-npm install -g agent-deck@latest
+npm install -g @noti0ns/agent-deck@latest
 agent-deck --version
 agent-deck start
 ```
@@ -46,7 +46,7 @@ To uninstall, stop the collector and remove its observer hooks before the packag
 ```sh
 agent-deck uninstall claude
 agent-deck uninstall agy
-npm uninstall -g agent-deck
+npm uninstall -g @noti0ns/agent-deck
 ```
 
 User data is retained. Tailscale mappings and LAN firewall rules, if configured,

@@ -16,7 +16,7 @@ change their work. Native hook installation is explicit and reversible.
 For published npm releases, install once and run from any directory:
 
 ```sh
-npm install -g agent-deck
+npm install -g @noti0ns/agent-deck
 agent-deck start
 ```
 
@@ -31,7 +31,7 @@ providers to enable. Use `agent-deck setup` to change them, `agent-deck doctor`
 for diagnostics, and `agent-deck --version` to check the installed version.
 On Windows, use `agent-deck.cmd` if PowerShell blocks the generated `.ps1` launcher.
 
-Update with `npm install -g agent-deck@latest` after stopping the collector.
+Update with `npm install -g @noti0ns/agent-deck@latest` after stopping the collector.
 [Installation and uninstall details](docs/installation.md#npm-cli).
 
 ### Run from source

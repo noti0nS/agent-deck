@@ -44,7 +44,7 @@ npm run release:npm
 npm run release:npm:smoke
 ```
 
-The result is `.release/npm/agent-deck-VERSION.tgz`, using the root package version.
+The result is `.release/npm/noti0ns-agent-deck-VERSION.tgz`, using the root package version.
 It contains one bundled CLI (internal workspaces included), dashboard assets,
 documentation/licenses, and Go hooks for Windows/Linux x64/ARM64. External runtime
 dependencies, including native modules, are installed by npm. No install-time hook
@@ -59,17 +59,18 @@ settings and the user's global npm installation alone.
 
 ### First publication
 
-The `agent-deck` npm name must be available to your npm account. Authenticate
+The package is published as `@noti0ns/agent-deck`; npm reserves the unscoped
+`agent-deck` name because it is too similar to `agentdeck`. Authenticate
 interactively (never put a token in the repository) and publish the tested tarball:
 
 ```sh
 npm login
-npm publish .release/npm/agent-deck-1.0.0.tgz --access public
+npm publish .release/npm/noti0ns-agent-deck-1.0.0.tgz --access public
 ```
 
 Substitute the current version if it changed. npm may require browser/2FA
-confirmation. Verify with `npm view agent-deck version` and a fresh
-`npm install -g agent-deck`. A local tarball build does not mean it is published.
+confirmation. Verify with `npm view @noti0ns/agent-deck version` and a fresh
+`npm install -g @noti0ns/agent-deck`. A local tarball build does not mean it is published.
 
 ### Subsequent releases from GitHub Actions
 
