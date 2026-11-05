@@ -44,7 +44,7 @@ jobs:
           for directory in agent-deck-*/; do
             tar -czf "${directory%/}.tar.gz" "${directory%/}"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: runtime-${{ matrix.os }}
           path: .release/*.tar.gz
