@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",
-    "@types/better-sqlite3": "^7.6.12",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.13.5",
     "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
