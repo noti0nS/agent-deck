@@ -32,6 +32,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:hooks
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm run release:npm
       - run: npm run release:npm:smoke
       - uses: actions/upload-artifact@v7
@@ -40,6 +42,13 @@ jobs:
           name: npm-package
           path: .release/npm/*.tgz
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: diagnostics-${{ matrix.os }}-${{ matrix.node }}
+          path: |
+            test-results/
+            playwright-report/
   publish:
     needs: package
     runs-on: ubuntu-latest

@@ -28,17 +28,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:hooks
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
       - run: npm run release:bundle
       - run: npm run release:smoke
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: diagnostics-ubuntu-${{ matrix.node }}
-          path: |
-            test-results/
-            playwright-report/
   dependencies:
     runs-on: ubuntu-latest
     steps:
