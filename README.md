@@ -52,7 +52,7 @@ single-use and valid for five minutes. LAN HTTP is for trusted networks; HTTPS
 is required for normal PWA installation. [Detailed setup](docs/installation.md).
 
 Do not expose the collector through public proxies, port forwarding or Tailscale
-Funnel. [Security model](SECURITY.md).
+Funnel.
 
 ## Commands
 
@@ -109,10 +109,10 @@ prices are not invented, and estimated costs can differ from provider billing.
 
 See the [platform/agent matrix](docs/compatibility.md),
 [integration contracts and MCP](docs/integration-compatibility.md), and
-[fixture provenance](fixtures/manifest.json). CI targets Windows, Linux and macOS;
+[fixture provenance](fixtures/manifest.json). CI and releases target Windows and Ubuntu only;
 check actual results before treating a platform or native CLI version as verified.
 
-## Development and contributions
+## Development
 
 ```sh
 npm run build
@@ -123,12 +123,11 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-[Contributing](CONTRIBUTING.md) ? [Adapter authoring](docs/adapter-authoring.md) ?
-[Release procedure](docs/releasing.md) ? [Changelog](CHANGELOG.md) ?
-[Security reports](SECURITY.md) ? [Dependency review](docs/dependency-review.md)
+[Release procedure](docs/releasing.md) | [Changelog](CHANGELOG.md) |
+[Dependency review](docs/dependency-review.md)
 
 Code lives in `apps/collector` and `apps/web`; shared logic is in `packages`.
 `tools/hook-shim` contains the Go hook, and `tools/doctor` the diagnostics formatter.
 Tests and screenshots use synthetic data. Design research is not a compatibility claim.
 
-MIT ? see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

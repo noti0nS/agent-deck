@@ -1,7 +1,7 @@
 # Installation and operation
 
 Agent Deck is experimental. Begin on your own computer; enable network access
-only after choosing the trust model in [SECURITY.md](../SECURITY.md).
+only after choosing Tailscale or private-LAN access as described below.
 
 ## From source
 
@@ -31,8 +31,7 @@ use `export AGENT_DECK_SKIP_HOOKS=1`.
 compatible prebuilt binary, it must compile them. Install Python 3 and:
 
 - Windows: Visual Studio Build Tools with Desktop development with C++.
-- macOS: Xcode Command Line Tools (`xcode-select --install`).
-- Linux: a C/C++ compiler and make (for example your distribution's build-essential package).
+- Ubuntu: a C/C++ compiler and make (the `build-essential` package).
 
 Use the documented Node major versions. After changing Node major or CPU
 architecture, reinstall dependencies with `npm ci`; do not copy `node_modules`
@@ -77,7 +76,7 @@ Do not enable Funnel or another public proxy.
 ./start-local-wifi.ps1 -LanAddress 192.168.1.23
 ```
 
-On macOS/Linux:
+On Ubuntu:
 
 ```sh
 AGENT_DECK_LAN_HOST=192.168.1.23 npm run agent-deck -- start

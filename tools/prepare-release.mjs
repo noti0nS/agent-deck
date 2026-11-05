@@ -17,8 +17,8 @@ function copy(path, destination = path) {
     filter: source => !/\.test\.(js|d\.ts)(\.map)?$/.test(source) && !source.endsWith('.map')
   });
 }
-for (const file of ['package.json', 'package-lock.json', 'LICENSE', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md', 'start-local-wifi.ps1']) copy(file);
-for (const file of ['installation.md', 'privacy.md', 'compatibility.md', 'dependency-review.md', 'integration-compatibility.md', 'adapter-authoring.md', 'releasing.md', 'release-notes.md']) copy(`docs/${file}`);
+for (const file of ['package.json', 'package-lock.json', 'LICENSE', 'README.md', 'CHANGELOG.md', 'start-local-wifi.ps1']) copy(file);
+for (const file of ['installation.md', 'privacy.md', 'compatibility.md', 'dependency-review.md', 'integration-compatibility.md', 'releasing.md', 'release-notes.md']) copy(`docs/${file}`);
 copy('docs/screenshots');
 copy('fixtures/manifest.json');
 for (const workspace of workspaces) {

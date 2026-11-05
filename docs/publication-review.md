@@ -15,9 +15,10 @@
   offline CLI exits nonzero. Tailscale setup is explicit and conflict-checked.
 - Neutral fixture/project/user examples, sanitized design export metadata and
   screenshots generated from synthetic E2E data.
-- Installation/update/removal, data privacy, compatibility, contribution,
-  vulnerability reporting, changelog and release documentation.
-- Windows/Linux/macOS and Node 22/24 CI targets, dependency/secret scanning,
+- Installation/update/removal, data privacy, compatibility, changelog and release
+  documentation. Contribution, adapter-authoring and security-reporting guides
+  were removed at the owner's request on 2026-11-05.
+- Windows/Ubuntu and Node 22/24 CI targets, dependency/secret scanning,
   Dependabot and a validated draft-release workflow.
 
 ## Evidence obtained locally

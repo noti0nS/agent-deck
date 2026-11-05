@@ -3,16 +3,16 @@
 This is an experimental monitor, not a promise of support for all CLI versions.
 
 The initial locally validated platform is **Windows x64 with Node 24.19.0**.
-Linux, macOS and Node 22 are validation targets, not certified support claims,
+Ubuntu and Node 22 are validation targets, not certified support claims,
 until their actual CI runs succeed. Do not advertise them as verified yet.
+macOS is not included in CI or releases because it cannot currently be tested.
 
 | Component | Target | Evidence / limitation |
 | --- | --- | --- |
 | Runtime | Node 22.17+ and 24, npm 10+ | CI matrix; native dependencies must install for the OS/CPU |
 | Hook build | Go 1.22+ | Go unit tests and compiled-shim integration tests |
 | Windows | x64 | Local development platform; CI validates a clean checkout |
-| Linux | x64 | CI target; native agent compatibility needs separate evidence |
-| macOS | Runner architecture | CI target; archive filename records actual CPU architecture |
+| Ubuntu | x64 | CI target; native agent compatibility needs separate evidence |
 | OpenCode | Existing server API/SSE; SQLite fallback | Synthetic contract fixtures; exact native release matrix not yet certified |
 | Claude Code | JSON inventory, lifecycle hooks, transcripts | Prior repository validation recorded 2.1.302; fixtures do not establish support for other releases |
 | Codex | Existing app-server daemon; rollout fallback | Transport tests and synthetic fixtures; daemon interfaces can change |
