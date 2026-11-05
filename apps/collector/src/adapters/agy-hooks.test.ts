@@ -13,6 +13,21 @@ import { AGY_HOOK_NAME, AgyHookNormalizer, agyHooksInstalled, buildAgyHooks, set
 const common = { _agent_deck_source: 'agy', source: 'startup', conversationId: 'conversation-1', workspacePaths: ['P:\\projects\\demo'], modelName: 'gemini-test' };
 
 describe('Antigravity native hooks configuration', () => {
+  it.skipIf(process.platform !== 'win32')('runs a simple Windows executable through the cmd argument launcher', () => {
+    const executablePath = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe');
+    const config = buildAgyHooks({}, executablePath) as any;
+    const command = config[AGY_HOOK_NAME].PreToolUse[0].hooks[0].command as string;
+    // Test the executable token through cmd.exe, including ordinary Win32 argv
+    // quoting, instead of bypassing the shell as the native-shim tests do.
+    const executable = command.split(' --source ')[0];
+    const result = spawnSync('cmd.exe', ['/d', '/s', '/c', `${executable} cmd.exe`], {
+      encoding: 'utf8', timeout: 5000, windowsHide: true
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.toLowerCase()).toContain('cmd.exe');
+  });
+
   it('installs once, preserves all unrelated hooks and removes only the observer even after subsequent user edits', () => {
     const dir = mkdtempSync(join(tmpdir(), 'agy-hooks-'));
     const path = join(dir, 'hooks.json');
