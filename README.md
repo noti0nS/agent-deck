@@ -123,7 +123,7 @@ prices are not invented, and estimated costs can differ from provider billing.
 
 See the [platform/agent matrix](docs/compatibility.md),
 [integration contracts and MCP](docs/integration-compatibility.md), and
-[fixture provenance](fixtures/manifest.json). CI and releases target Windows and Ubuntu only;
+[fixture provenance](fixtures/manifest.json). Test CI runs on Ubuntu; release packages target Windows and Ubuntu;
 check actual results before treating a platform or native CLI version as verified.
 
 ## Development

@@ -11,7 +11,7 @@ macOS is not included in CI or releases because it cannot currently be tested.
 | --- | --- | --- |
 | Runtime | Node 22.22+ and 24, npm 10+ | CI matrix; native dependencies must install for the OS/CPU |
 | Hook build | Go 1.22+ | Go unit tests and compiled-shim integration tests |
-| Windows | x64 | Local development platform; CI validates a clean checkout |
+| Windows | x64 | Local development platform and release package target; excluded from the test CI matrix |
 | Ubuntu | x64 | CI target; native agent compatibility needs separate evidence |
 | OpenCode | Existing server API/SSE; SQLite fallback | Synthetic contract fixtures; exact native release matrix not yet certified |
 | Claude Code | JSON inventory, lifecycle hooks, transcripts | Prior repository validation recorded 2.1.302; fixtures do not establish support for other releases |

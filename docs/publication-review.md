@@ -18,7 +18,7 @@
 - Installation/update/removal, data privacy, compatibility, changelog and release
   documentation. Contribution, adapter-authoring and security-reporting guides
   were removed at the owner's request on 2026-11-05.
-- Windows/Ubuntu and Node 22/24 CI targets, dependency/secret scanning,
+- Ubuntu test CI with Node 22/24, Windows/Ubuntu release packages, dependency/secret scanning,
   Dependabot and a validated draft-release workflow.
 
 ## Evidence obtained locally
