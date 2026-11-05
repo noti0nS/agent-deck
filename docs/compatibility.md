@@ -11,8 +11,9 @@ macOS is not included in CI or releases because it cannot currently be tested.
 | --- | --- | --- |
 | Runtime | Node 22.22+ and 24, npm 10+ | CI matrix; native dependencies must install for the OS/CPU |
 | Hook build | Go 1.22+ | Go unit tests and compiled-shim integration tests |
-| Windows | x64 | Local development platform and release package target; excluded from the test CI matrix |
+| Windows | x64 | Local development platform; npm package CI target on Node 22.22 and 24 |
 | Ubuntu | x64 | CI target; native agent compatibility needs separate evidence |
+| npm ARM64 | Windows/Linux ARM64 | Prebuilt Go hooks included; cross-compiled only, no ARM64 runtime CI; native Node dependencies may require compilation |
 | OpenCode V2 only | Registered service discovery/authentication; `/api/session` and `/api/event`; API history import | Tested against V2 2.2.5 and synthetic API/SSE contracts |
 | Claude Code | JSON inventory, lifecycle hooks, transcripts | Prior repository validation recorded 2.1.302; fixtures do not establish support for other releases |
 | Codex | Existing app-server daemon; rollout fallback | Transport tests and synthetic fixtures; daemon interfaces can change |

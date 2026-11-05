@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Source } from '@agent-deck/core';
 import { adapterHealthToDoctor, formatDoctorReport } from '@agent-deck/doctor';
 import { AgyAdapter } from './adapters/agy.js';
@@ -48,6 +48,13 @@ export function getDefaultWebBuildDir(): string {
   return resolve(__dirname, '..', '..', 'web', 'build');
 }
 
+export function getDefaultHookPath(): string {
+  const name = process.platform === 'win32' ? 'agent-deck-hook.exe' : 'agent-deck-hook';
+  const directory = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim');
+  const packaged = join(directory, 'bin', `${process.platform}-${process.arch}`, name);
+  return existsSync(packaged) ? packaged : join(directory, name);
+}
+
 export function createProviderAdapters(providers: Provider[], enableAgyRemoteControl = false) {
   return providers.map(provider => {
     switch (provider) {
@@ -60,6 +67,7 @@ export function createProviderAdapters(providers: Provider[], enableAgyRemoteCon
 }
 
 const usage = `Usage: agent-deck <start|status|doctor|setup|probe|devices|uninstall|pair|run|import|mcp>
+Options: --help, --version
 From source: npm run agent-deck doctor (no -- separator needed for commands).
 First run asks which providers to enable. Run setup again to change them.
 Non-interactive: npm run agent-deck setup providers codex,opencode (or none).
@@ -70,6 +78,10 @@ Help and doctor are always available without setup.`;
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   let cmd = argv[0] || 'start';
   const args = argv.slice(1);
+  if (cmd === '--version' || cmd === '-v') {
+    console.log(JSON.parse(readFileSync(resolve(__dirname, '..', '..', '..', 'package.json'), 'utf8')).version);
+    return 0;
+  }
   let pairOnStart = false;
   let pairingHost: string | undefined;
   if (['help', '--help', '-h'].includes(cmd) || args.includes('--help')) { console.log(usage); return 0; }
@@ -79,8 +91,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   if (cmd === 'setup' && args[0] && !['providers', 'claude', 'agy', 'tailscale'].includes(args[0])) {
     console.error(usage); return 1;
   }
-  const shimName = process.platform === 'win32' ? 'agent-deck-hook.exe' : 'agent-deck-hook';
-  const commandPath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', shimName);
+  const commandPath = getDefaultHookPath();
   let providers: Provider[] = [];
   const providerWizard = cmd === 'setup' && (!args[0] || args[0] === 'providers');
   // Diagnostics, help, and explicit hook maintenance must remain usable when setup is broken.
@@ -225,19 +236,14 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     };
     console.log(formatDoctorReport(report));
     console.log('Provider rows show local detection and capabilities, not active collector connections.');
-    if (!report.collectorRunning) console.log('Start the collector in a separate terminal and keep it open: npm run agent-deck start');
+    if (!report.collectorRunning) console.log('Start the collector in a separate terminal and keep it open: agent-deck start');
     store.close();
     return 0;
   }
 
   if (cmd === 'setup' && (args[0] === 'claude' || args[0] === 'agy')) {
     const dryRun = args.includes('--dry-run');
-    const shimName = process.platform === 'win32' ? 'agent-deck-hook.exe' : 'agent-deck-hook';
-    const exePath = resolve(__dirname, '..', '..', '..', 'tools', 'hook-shim', shimName);
-    // Built by `npm run build:hooks`. Falls back to PATH for packaged installs
-    // that ship the shim alongside the CLI instead of in the repo tree.
-    if (!existsSync(exePath)) throw new Error('Hook shim missing. Run npm run build:hooks before setup.');
-    const commandPath = exePath;
+    if (!existsSync(commandPath)) throw new Error('Hook shim missing. Reinstall agent-deck, or run npm run build:hooks in a source checkout.');
     const res = args[0] === 'agy' ? setupAgyHooks({ commandPath, dryRun }) : setupClaudeHooks({ commandPath, dryRun });
     console.log(res.diff);
     if (res.backupPath) {
@@ -308,7 +314,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const lanUrl = privateLanUrl(listener);
       if (!lanUrl || (explicitHost && explicitHost !== listener?.host) || !await checkCollector(lanUrl)) {
         if (await checkCollector()) {
-          throw new Error('Collector is already running without the requested LAN access. Press Ctrl+C in its terminal, then run npm run agent-deck pair again.');
+          throw new Error('Collector is already running without the requested LAN access. Press Ctrl+C in its terminal, then run agent-deck pair again.');
         }
         pairingHost = await discoverLanHost(explicitHost);
         console.log('Starting collector with LAN access for pairing.');
@@ -382,7 +388,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     } catch (error) {
       await cleanup();
       if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
-        console.error(`Port ${port} is already in use. Run npm run agent-deck doctor. Stop the existing collector in its terminal before restarting, or choose another AGENT_DECK_PORT.`);
+        console.error(`Port ${port} is already in use. Run agent-deck doctor. Stop the existing collector in its terminal before restarting, or choose another AGENT_DECK_PORT.`);
         return 1;
       }
       throw error;
@@ -418,7 +424,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` || process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
+// npm's Unix global command is a symlink; compare its real target, not its name.
+if (process.argv[1] && existsSync(process.argv[1]) && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   runCli().then(code => { process.exitCode = code; }).catch((err) => {
     console.error(err);
     process.exit(1);
