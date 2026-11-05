@@ -138,7 +138,18 @@ export class OpenCodeAdapter implements Adapter {
   private emitSession(info: OpenCodeSession, historical = false): void {
     if (!this.ctx) return;
     const runId = `opencode:${info.id}`;
-    const fingerprint = JSON.stringify(info);
+    const tokens = info.tokens;
+    const model = info.model?.id ?? 'unknown';
+    const usage = {
+      tokensIn: tokens.input, tokensOut: tokens.output, tokensReasoning: tokens.reasoning,
+      cacheRead: tokens.cache.read, cacheWrite: tokens.cache.write
+    };
+    // Catalog entries may require the provider namespace (including gateway model IDs).
+    const cost = info.cost > 0 ? info.cost
+      : (info.model?.providerID ? estimateApiCostUsd(`${info.model.providerID}/${model}`, usage) : undefined)
+        ?? estimateApiCostUsd(model, usage);
+    // A catalog refresh can make an unchanged session priceable.
+    const fingerprint = JSON.stringify([info, cost]);
     const changed = this.snapshots.get(info.id) !== fingerprint;
     if (changed || historical) {
       this.ctx.emit({ type: 'run.started', runId, ts: info.time.updated, payload: {
@@ -147,13 +158,8 @@ export class OpenCodeAdapter implements Adapter {
         title: info.title || extractProjectName(info.location.directory), model: info.model?.id ?? 'unknown',
         agentMode: info.agent, confidence: historical ? 'inferred' : 'live', startedAt: info.time.created, historical
       } });
-      const tokens = info.tokens;
-      const cost = info.cost > 0 ? info.cost : estimateApiCostUsd(info.model?.id ?? 'unknown', {
-        tokensIn: tokens.input, tokensOut: tokens.output, tokensReasoning: tokens.reasoning,
-        cacheRead: tokens.cache.read, cacheWrite: tokens.cache.write
-      });
       this.ctx.emit({ type: 'usage.tick', runId, ts: info.time.updated, payload: {
-        sampleKey: `${runId}:session_total:${tokens.input}:${tokens.output}:${tokens.reasoning}:${tokens.cache.read}:${tokens.cache.write}:${info.cost}`,
+        sampleKey: `${runId}:session_total:${tokens.input}:${tokens.output}:${tokens.reasoning}:${tokens.cache.read}:${tokens.cache.write}:${info.cost}:${cost ?? 'unpriced'}`,
         tokensInTotal: tokens.input, tokensOutTotal: tokens.output, tokensReasoningTotal: tokens.reasoning,
         cacheReadTotal: tokens.cache.read, cacheWriteTotal: tokens.cache.write, costUsdTotal: cost,
         costSource: info.cost > 0 ? 'tool' : cost === undefined ? 'none' : 'estimated', precision: info.cost > 0 ? 'exact' : 'derived'

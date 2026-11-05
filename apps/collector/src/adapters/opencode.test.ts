@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Service } from '@opencode/client/service';
+import { PRICE_TABLE, setPriceTable } from '@agent-deck/pricing';
+import { catalogPriceTable } from '../model-catalog.js';
 import { CollectorEngine } from '../http.js';
 import { CollectorStore } from '../store.js';
 import { OpenCodeAdapter, normalizeOpenCodeSseEvent, type OpenCodeSession } from './opencode.js';
@@ -19,9 +21,68 @@ function fixture() {
   return { store, engine, ctx };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); setPriceTable(PRICE_TABLE); });
 
 describe('OpenCode V2 adapter', () => {
+  it.each([
+    ['openai', 'gpt-6-astra-fast', 4.55],
+    ['opencode-go', 'deepseek-v4.1-flash', 0.48]
+  ])('estimates zero-reported costs using %s/%s catalog prices', (providerID, id, expected) => {
+    // A gateway-qualified ID and an ambiguous bare ID both need the provider namespace.
+    setPriceTable(catalogPriceTable({
+      vercel: { models: { 'openai/gpt-6-astra-fast': { cost: { input: 20, output: 100, cache_read: 2 } } } },
+      'opencode-go': { models: { 'deepseek-v4.1-flash': { cost: { input: 2, output: 10, cache_read: 0.4, cache_write: 5 } } } },
+      reseller: { models: { 'deepseek-v4.1-flash': { cost: { input: 99, output: 99 } } } }
+    }, 1));
+    const { store, engine, ctx } = fixture();
+    const adapter = new OpenCodeAdapter();
+    adapter['ctx'] = ctx;
+    const info = { ...session(), model: { id, providerID }, cost: 0,
+      tokens: { input: 100_000, output: 20_000, reasoning: 3_000, cache: { read: 100_000, write: 2_000 } } };
+    try {
+      adapter['emitSession'](info, true);
+      adapter['emitSession'](info, true);
+      expect(engine.state.runs['opencode:ses_one'].usage).toMatchObject({ costUsd: expected, costSource: 'estimated' });
+      const summary = store.getUsageSummary(0, Date.now(), []);
+      expect(summary.estimatedCostUsd).toBeCloseTo(expected);
+      expect(summary.tokensIn).toBe(100_000);
+      expect(summary.exactCostUsd).toBe(0);
+    } finally { store.close(); }
+  });
+
+  it('prices unchanged sessions after catalog sync without duplicating usage, including after restart', () => {
+    const { store, engine, ctx } = fixture();
+    const adapter = new OpenCodeAdapter();
+    adapter['ctx'] = ctx;
+    const info = { ...session(), model: { id: 'new-model', providerID: 'provider' }, cost: 0,
+      tokens: { input: 100_000, output: 20_000, reasoning: 3_000, cache: { read: 10_000, write: 0 } } };
+    try {
+      adapter['emitSession'](info);
+      expect(engine.state.runs['opencode:ses_one'].usage.costSource).toBe('none');
+      setPriceTable(catalogPriceTable({ provider: { models: { 'new-model': { cost: { input: 2, output: 10, cache_read: 0.5 } } } } }, 1));
+      adapter['emitSession'](info);
+      expect(engine.state.runs['opencode:ses_one'].usage).toMatchObject({ costUsd: 0.435, costSource: 'estimated' });
+      adapter['emitSession'](info);
+      const restarted = new OpenCodeAdapter();
+      restarted['ctx'] = ctx;
+      restarted['emitSession'](info, true);
+      expect(store.getUsageSummary(0, Date.now(), [])).toMatchObject({ tokensIn: 100_000, tokensOut: 20_000, estimatedCostUsd: 0.435 });
+    } finally { store.close(); }
+  });
+
+  it('preserves tool-reported costs and falls back to unqualified model rates', () => {
+    const { store, engine, ctx } = fixture();
+    const adapter = new OpenCodeAdapter();
+    adapter['ctx'] = ctx;
+    setPriceTable(catalogPriceTable({ openai: { models: { 'gpt-4o': { cost: { input: 2, output: 10, cache_read: 0.5 } } } } }, 1));
+    try {
+      adapter['emitSession']({ ...session(), model: { id: 'gpt-4o', providerID: 'custom' }, cost: 0 });
+      expect(engine.state.runs['opencode:ses_one'].usage).toMatchObject({ costUsd: 0.000435, costSource: 'estimated' });
+      adapter['emitSession'](session('ses_paid'));
+      expect(engine.state.runs['opencode:ses_paid'].usage).toMatchObject({ costUsd: 0.25, costSource: 'tool', precision: 'exact' });
+    } finally { store.close(); }
+  });
+
   it('discovers the registered authenticated service, without starting OpenCode', async () => {
     vi.spyOn(Service, 'discover').mockResolvedValue({ url: 'http://127.0.0.1:49374',
       auth: { type: 'basic', username: 'test', password: 'test-only' } });
