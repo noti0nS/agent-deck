@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"io"
+	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEnvelopePreservesNativeIdentity(t *testing.T) {
@@ -35,5 +38,44 @@ func TestOnlyLoopbackTelemetry(t *testing.T) {
 		if loopbackAddress(addr) {
 			t.Fatalf("accepted non-loopback or invalid destination %s", addr)
 		}
+	}
+}
+
+type delayedReader struct {
+	io.Reader
+	delay time.Duration
+}
+
+func (r *delayedReader) Read(p []byte) (int, error) {
+	time.Sleep(r.delay)
+	r.delay = 0
+	return r.Reader.Read(p)
+}
+
+func TestDelayedInputDoesNotConsumeWriteDeadline(t *testing.T) {
+	receiver, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer receiver.Close()
+	input := &delayedReader{
+		Reader: strings.NewReader(`{"session_id":"delayed-input","hook_event_name":"Stop","last_assistant_message":"Delivered after input delay."}`),
+		delay:  50 * time.Millisecond,
+	}
+	sendPayload(input, receiver.LocalAddr().String(), "claude", "")
+	if err := receiver.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, maxPayload)
+	n, _, err := receiver.ReadFrom(buf)
+	if err != nil {
+		t.Fatalf("hook payload lost after delayed input: %v", err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(buf[:n], &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["session_id"] != "delayed-input" || payload["last_assistant_message"] != "Delivered after input delay." {
+		t.Fatalf("unexpected hook payload: %v", payload)
 	}
 }

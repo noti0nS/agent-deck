@@ -57,6 +57,26 @@ func loopbackAddress(addr string) bool {
 	return ip != nil && ip.IsLoopback() && err == nil && n > 0 && n <= 65535
 }
 
+func sendPayload(input io.Reader, addr, source, event string) {
+	buf, err := io.ReadAll(io.LimitReader(input, maxPayload+1))
+	if err != nil {
+		return
+	}
+	payload := preparePayload(buf, source, event)
+	if payload == nil {
+		return
+	}
+	// Reading stdin must not consume the UDP send budget. main still caps
+	// the entire observation at 100ms so the parent agent never waits longer.
+	conn, err := net.DialTimeout("udp", addr, 20*time.Millisecond)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_ = conn.SetWriteDeadline(time.Now().Add(20 * time.Millisecond))
+	_, _ = conn.Write(payload)
+}
+
 func main() {
 	// Bound observation to 100ms. A 10ms budget dropped terminal events under
 	// Windows scheduler load; telemetry still never blocks indefinitely or fails the CLI.
@@ -86,20 +106,7 @@ func main() {
 		if !loopbackAddress(addr) {
 			return
 		}
-		conn, err := net.DialTimeout("udp", addr, 20*time.Millisecond)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		_ = conn.SetWriteDeadline(time.Now().Add(20 * time.Millisecond))
-
-		buf, err := io.ReadAll(io.LimitReader(os.Stdin, maxPayload+1))
-		if err != nil {
-			return
-		}
-		if payload := preparePayload(buf, source, event); payload != nil {
-			_, _ = conn.Write(payload)
-		}
+		sendPayload(os.Stdin, addr, source, event)
 	}()
 
 	select {
