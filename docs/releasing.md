@@ -2,11 +2,13 @@
 
 1. Resolve local edits and review the final diff. Do not release a mixed or
    unreviewed worktree. Confirm the version and changelog.
-2. Validate a clean checkout with `npm ci`, build, typecheck, unit/Go/E2E tests.
-3. Run `npm audit --audit-level=moderate` and a redacted Gitleaks scan of all Git history
-   and the working directory. Review images and design assets manually. Secret
+2. Keep worktree validation targeted to the change. The manually dispatched release
+   workflow runs the clean install, build, typecheck and full unit/Go/E2E tests.
+3. The release workflow runs `npm audit --audit-level=moderate`. Review the redacted
+   Gitleaks CI results for Git history, plus any uncommitted files before release.
+   Review images and design assets manually. Secret
    scanning cannot certify the absence of every kind of confidential content.
-4. Generate `npm run release:bundle` and run `npm run release:smoke`.
+4. The release workflow generates the runtime bundle and runs its smoke check.
    Staging uses an explicit file allowlist; it excludes Git, source fixtures,
    design research, local databases, environment files and node_modules.
 5. Push the reviewed commit and tag. Run **Prepare draft release** with that
@@ -27,6 +29,10 @@ the npm CLI bundles the internal packages into one distribution.
 The root remains a private development workspace. `release:npm` generates a
 separate publishable manifest and a file-allowlisted tarball; do not run `npm publish`
 at the repository root or remove its `private` flag.
+
+The manual npm deployment workflow owns the full validation below. Run only
+focused checks in a worktree; repeat this sequence locally when diagnosing a
+release failure, rather than on every change:
 
 ```sh
 npm ci
@@ -73,13 +79,14 @@ This uses short-lived OIDC authentication, not a stored npm token. The repositor
 must be public for the workflow's `--provenance` publication.
 
 Update the version/changelog, push a matching `vVERSION` tag, then manually run
-the **npm package** workflow on that tag (for example
+the **Publish npm package** workflow on that tag (for example
 `gh workflow run npm.yml --ref v1.0.1`). A manual run on a branch is rejected;
 using the tag as the workflow ref keeps publication provenance tied to the code
 being packaged. The workflow checks the version,
 builds and smoke-tests on Windows/Ubuntu with Node 22.22 and 24, and publishes the
-tested Ubuntu/Node 24 tarball only after all four jobs pass. Pushes and pull requests
-validate packages but do not publish. Each npm version can be published only once.
+tested Ubuntu/Node 24 tarball only after all four jobs pass. This workflow has only
+a `workflow_dispatch` trigger: pushes (including to `master`), pull requests and
+new tags do not run it. Each npm version can be published only once.
 
 Sanitizing current files does not remove earlier Git versions. If prior history
 contains information that must remain private, review a history rewrite or a
