@@ -1,6 +1,12 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
+  import { fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { prefersReducedMotion } from 'svelte/motion';
   import { deckStore } from '#lib/stores/deck.svelte.js';
-  import { formatElapsed, formatTokens, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '#lib/format.js';
+  import { formatElapsed, SOURCE_COLORS, STATUS_COLORS, STATUS_ICONS } from '#lib/format.js';
+  import AnimatedTokens from '#lib/components/AnimatedTokens.svelte';
+  import AnimatedCost from '#lib/components/AnimatedCost.svelte';
 
   const runs = $derived(deckStore.dashboardSessions.slice(0, 6));
   const agg = $derived(deckStore.visibleAggregates);
@@ -17,7 +23,7 @@
       <div>
         <div class="chrome-label">Today's Tokens</div>
         <div class="font-mono-tabular text-[28px] leading-none font-bold text-[#ECEDF2] mt-1.5 sm:text-[42px]">
-          {formatTokens(agg.todayTokensIn + agg.todayTokensOut)}
+          <AnimatedTokens value={agg.todayTokensIn + agg.todayTokensOut} />
         </div>
       </div>
 
@@ -25,9 +31,9 @@
         <div class="chrome-label">API-Equiv / Spend</div>
         <div class="font-mono-tabular text-[24px] leading-none font-semibold text-[#ECEDF2] mt-1.5 sm:text-[36px]">
           {#if agg.hasExactCost}
-            ${agg.todayCostExactUsd.toFixed(2)}
+            <AnimatedCost costUsd={agg.todayCostExactUsd} costSource="tool" precision="exact" />
           {:else if agg.hasEstimatedCost}
-            ${agg.todayCostEstimatedUsd.toFixed(2)} <span class="text-[16px] sm:text-[18px] text-[#8B93A6]">est.</span>
+            <AnimatedCost costUsd={agg.todayCostEstimatedUsd} costSource="estimated" precision="estimated" estBadgeClass="text-[16px] sm:text-[18px] text-[#8B93A6]" />
           {:else}
             —
           {/if}
@@ -63,9 +69,12 @@
         type="button"
         onclick={() => deckStore.setView('detail', run.id)}
         class="bezel-specular w-full text-left rounded px-3.5 py-3 flex flex-col gap-1.5 relative hover:border-[#2E3545] active:bg-[#171B24] sm:px-6 sm:py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 overflow-hidden"
+        animate:flip={{ duration: prefersReducedMotion.current ? 0 : 250, easing: cubicOut }}
+        in:fade={{ duration: prefersReducedMotion.current ? 0 : 150 }}
       >
         <div
           class="absolute left-0 top-0 bottom-0 w-[4px]"
+          class:ambient-rail-pulse={run.status === 'waiting'}
           style="background-color: {stColor}; {run.confidence === 'inferred' ? 'background-image: repeating-linear-gradient(to bottom, transparent 0 4px, #12151C 4px 8px);' : ''}"
         ></div>
 
@@ -104,7 +113,7 @@
             {/if}
             <span class="text-[#8B93A6]">{formatElapsed(run.startedAt, deckStore.now, run.endedAt)}</span>
             <span class="text-[#ECEDF2] font-semibold w-16 text-right sm:w-24">
-              {formatTokens(run.usage.tokensIn + run.usage.tokensOut)}
+              <AnimatedTokens value={run.usage.tokensIn + run.usage.tokensOut} />
             </span>
           </div>
         </div>

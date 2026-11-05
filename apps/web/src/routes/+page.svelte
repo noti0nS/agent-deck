@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import { deckStore, type ViewName } from '#lib/stores/deck.svelte.js';
   import { formatTokens } from '#lib/format.js';
+  import AnimatedTokens from '#lib/components/AnimatedTokens.svelte';
+  import AnimatedCost from '#lib/components/AnimatedCost.svelte';
   import PairCodeInput from '#lib/components/PairCodeInput.svelte';
   import SourceSelector from '#lib/components/SourceSelector.svelte';
   import AmbientView from '#lib/views/AmbientView.svelte';
@@ -98,10 +100,10 @@
         <div class="dashboard-summary">
           {#if deckStore.visibleAggregates.waitingCount}<span class="attention-count">{deckStore.visibleAggregates.waitingCount} awaiting attention</span>{/if}
           <span class="running-count">{deckStore.visibleAggregates.activeCount} active</span>
-          {#if deckStore.visibleAggregates.hasExactCost}<span class="dashboard-tokens">$ {deckStore.visibleAggregates.todayCostExactUsd.toFixed(2)}</span>{/if}
-          {#if deckStore.visibleAggregates.hasEstimatedCost}<span class="dashboard-tokens">$ {deckStore.visibleAggregates.todayCostEstimatedUsd.toFixed(2)} est.</span>{/if}
+          {#if deckStore.visibleAggregates.hasExactCost}<span class="dashboard-tokens"><AnimatedCost costUsd={deckStore.visibleAggregates.todayCostExactUsd} costSource="tool" precision="exact" /></span>{/if}
+          {#if deckStore.visibleAggregates.hasEstimatedCost}<span class="dashboard-tokens"><AnimatedCost costUsd={deckStore.visibleAggregates.todayCostEstimatedUsd} costSource="estimated" precision="estimated" /></span>{/if}
           {#if deckStore.visibleAggregates.burnRateAlarm}<span class="attention-count" data-testid="burn-rate-alarm">High spend · ${deckStore.visibleAggregates.burnRateUsdPerMin.toFixed(2)}/min</span>{/if}
-          <span class="dashboard-tokens">{formatTokens(deckStore.visibleAggregates.todayTokensIn + deckStore.visibleAggregates.todayTokensOut)} tok today</span>
+          <span class="dashboard-tokens"><AnimatedTokens value={deckStore.visibleAggregates.todayTokensIn + deckStore.visibleAggregates.todayTokensOut} /> tok today</span>
           <div class="settings-anchor">
             <button type="button" class="dashboard-settings" aria-label="Settings" aria-expanded={settingsOpen} onclick={() => settingsOpen = !settingsOpen}><Settings size={18} strokeWidth={1.6} aria-hidden="true" /></button>
           </div>

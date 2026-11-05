@@ -245,6 +245,31 @@ button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,s
 .project-panel:hover { transform:none; box-shadow:none; border-color:#6d8091; }
 .session-card { border-left:0; border-top:2px solid var(--rail); background:#13191f; padding:0; gap:0; }
 .session-card:hover { background:#18212a; }
+
+@keyframes rail-attention-flash {
+  0% {
+    border-top-color: #ffe699;
+  }
+  35% {
+    border-top-color: #ffd27a;
+  }
+  100% {
+    border-top-color: var(--rail);
+  }
+}
+
+.session-card.attention-pulse {
+  animation: rail-attention-flash 1200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ambient-rail-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.ambient-rail-pulse {
+  animation: ambient-rail-breathe 2.4s ease-in-out infinite;
+}
 .monitor-channel { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid #2c3640; background:#0e141a; font:10px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; color:#aebdca; }
 .monitor-signal { display:flex; align-items:center; gap:6px; }
 .monitor-signal i { width:6px; height:6px; background:currentColor; border-radius:50%; }
