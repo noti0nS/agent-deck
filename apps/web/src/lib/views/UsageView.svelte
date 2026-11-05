@@ -246,7 +246,9 @@
             <div class="py-2 flex items-center justify-between gap-2">
               <div class="truncate">
                 <span class="text-[#ECEDF2] font-medium">{m.key}</span>
-                <span class="text-[#8B93A6] ml-2">{m.turns} turns</span>
+                <span class="text-[#8B93A6] ml-2" title="Turn counts require provider turn metadata; token usage alone does not determine the number of turns.">
+                  {m.turns > 0 ? `${m.turns} reported ${m.turns === 1 ? 'turn' : 'turns'}` : 'turns not reported'}
+                </span>
               </div>
               <div class="shrink-0 text-right">
                 <span class="text-[#ECEDF2]">{formatTokens(m.tokensIn + m.tokensOut)}</span>

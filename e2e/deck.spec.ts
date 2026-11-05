@@ -208,6 +208,8 @@ test.describe('Agent Deck PWA E2E (phone 390x844 / 412x915 + tablet 1024x768 / 1
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByTestId('nav-usage').click();
         await expect(page.getByTestId('usage-view')).toBeVisible();
+        await expect(page.getByTestId('usage-view')).toContainText('turns not reported');
+        await expect(page.getByTestId('usage-view')).not.toContainText('0 turns');
         await expectNoHorizontalOverflow(page);
         await page.reload();
         await expect(page.getByTestId('ambient-view')).toBeVisible();
