@@ -13,7 +13,7 @@ macOS is not included in CI or releases because it cannot currently be tested.
 | Hook build | Go 1.22+ | Go unit tests and compiled-shim integration tests |
 | Windows | x64 | Local development platform and release package target; excluded from the test CI matrix |
 | Ubuntu | x64 | CI target; native agent compatibility needs separate evidence |
-| OpenCode | Existing server API/SSE; SQLite fallback | Synthetic contract fixtures; exact native release matrix not yet certified |
+| OpenCode V2 only | Registered service discovery/authentication; `/api/session` and `/api/event`; API history import | Tested against V2 2.2.5 and synthetic API/SSE contracts |
 | Claude Code | JSON inventory, lifecycle hooks, transcripts | Prior repository validation recorded 2.1.302; fixtures do not establish support for other releases |
 | Codex | Existing app-server daemon; rollout fallback | Transport tests and synthetic fixtures; daemon interfaces can change |
 | Antigravity | Observer hooks; summaries/transcripts | Hook schema/transport tests and synthetic fixtures; native version certification pending |

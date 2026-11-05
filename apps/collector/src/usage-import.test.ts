@@ -105,8 +105,8 @@ describe('M6 Usage Queries & Idempotent History Backfill', () => {
     // 3. History backfill from fixtures is idempotent across repeated invocations
     const claudeDir = join(process.cwd(), 'fixtures');
     const codexDir = join(process.cwd(), 'fixtures', 'codex');
-    runHistoryBackfill(engine, {
-      opencodeDbPath: 'nonexistent.db',
+    await runHistoryBackfill(engine, {
+      providers: ['claude', 'codex', 'agy'],
       claudeProjectsDir: claudeDir,
       codexSessionsDir: codexDir,
       agyBaseDir: 'nonexistent'
@@ -118,8 +118,8 @@ describe('M6 Usage Queries & Idempotent History Backfill', () => {
 
     const beforeRollup = store.getUsageSummary(0, now + 86_400_000, []);
     // Re-run backfill: rollups must be byte-for-byte identical
-    runHistoryBackfill(engine, {
-      opencodeDbPath: 'nonexistent.db',
+    await runHistoryBackfill(engine, {
+      providers: ['claude', 'codex', 'agy'],
       claudeProjectsDir: claudeDir,
       codexSessionsDir: codexDir,
       agyBaseDir: 'nonexistent'

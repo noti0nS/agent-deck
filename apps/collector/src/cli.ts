@@ -159,7 +159,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const caps = await adapter.probe();
       console.log(`[probe] source=opencode capabilities=${JSON.stringify(caps)}`);
       adapter['ctx'] = ctx;
-      adapter.reconcileFromDb(tail, 'polled');
+      await adapter.reconcileSessionStatuses();
     } else if (source === 'claude') {
       const adapter = new ClaudeAdapter({ udpPort: 0 });
       const caps = await adapter.probe();
@@ -264,7 +264,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
     const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
-    const res = runHistoryBackfill(engine, { providers });
+    const res = await runHistoryBackfill(engine, { providers });
     console.log(
       `History backfill complete in ${res.durationMs}ms: opencode=${res.opencodeSessions}, claudeLines=${res.claudeLines}, codexLines=${res.codexLines}, agy=${res.agyConversations}`
     );
@@ -366,7 +366,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       const importedProviders = store.getSetting<{ providers?: Provider[] }>('last_history_import')?.providers ?? [];
       const pendingProviders = providers.filter(provider => !importedProviders.includes(provider));
       if (process.env.AGENT_DECK_IMPORT_HISTORY !== '0' && pendingProviders.length) {
-        runHistoryBackfill(engine, { providers: pendingProviders });
+        await runHistoryBackfill(engine, { providers: pendingProviders });
       }
 
       for (const adapter of createProviderAdapters(providers, engine.state.prefs.enableAgyRemoteControl)) engine.registerAdapter(adapter);

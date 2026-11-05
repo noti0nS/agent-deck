@@ -7,7 +7,7 @@ import { setupClaudeHooks, uninstallClaudeHooks, removeAgentDeckHooksFromSetting
 import { setupAgyHooks, uninstallAgyHooks, removeAgyHooks } from './adapters/agy-hooks.js';
 
 export const PROVIDERS = [
-  { id: 'opencode', label: 'OpenCode', hint: 'Existing server and local sessions', directory: '.local/share/opencode' },
+  { id: 'opencode', label: 'OpenCode', hint: 'Existing V2 service and session API', directory: '.local/share/opencode' },
   { id: 'claude', label: 'Claude Code', hint: 'Installs observer hooks; reads local sessions', directory: '.claude' },
   { id: 'codex', label: 'Codex', hint: 'Existing app-server and local sessions', directory: '.codex' },
   { id: 'agy', label: 'Antigravity', hint: 'Installs observer hooks; reads local sessions', directory: '.gemini/antigravity-cli' }

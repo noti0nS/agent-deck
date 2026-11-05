@@ -1,146 +1,149 @@
+import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { once } from 'node:events';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Service } from '@opencode/client/service';
 import { CollectorEngine } from '../http.js';
 import { CollectorStore } from '../store.js';
-import {
-  OpenCodeAdapter,
-  normalizeOpenCodeSseEvent,
-  parseOpenCodeModel,
-  type OpenCodeSessionRow
-} from './opencode.js';
+import { OpenCodeAdapter, normalizeOpenCodeSseEvent, type OpenCodeSession } from './opencode.js';
 
-describe('OpenCodeAdapter & fixture replay', () => {
-  it('uses session status events rather than persisted compaction timestamps', () => {
-    const metadata = normalizeOpenCodeSseEvent({ type: 'session.updated', properties: { info: {
-      id: 'ses_one', directory: 'P:/project', time: { compacting: 100, updated: 200 }
-    } } }, 300);
-    expect(metadata.some(event => event.type === 'compact.started')).toBe(false);
-    for (const [type, expected] of [['busy', 'running'], ['retry', 'running'], ['idle', 'idle']]) {
-      const events = normalizeOpenCodeSseEvent({ type: 'session.status', properties: { sessionID: 'ses_one', status: { type } } });
-      expect(events.at(-1)?.runId).toBe('opencode:ses_one');
-      expect(events.at(-1)?.payload).toMatchObject({ to: expected });
-    }
+const session = (id = 'ses_one'): OpenCodeSession => ({
+  ...JSON.parse(readFileSync('fixtures/opencode/sessions.json', 'utf8'))[0], id
+});
+
+function fixture() {
+  const store = new CollectorStore(':memory:');
+  const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+  const ctx = { emit: (event: Parameters<CollectorEngine['ingest']>[0]) => { engine.ingest(event); },
+    reportHealth: () => {}, getSetting: () => undefined, setSetting: () => {} };
+  return { store, engine, ctx };
+}
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('OpenCode V2 adapter', () => {
+  it('discovers the registered authenticated service, without starting OpenCode', async () => {
+    vi.spyOn(Service, 'discover').mockResolvedValue({ url: 'http://127.0.0.1:49374',
+      auth: { type: 'basic', username: 'test', password: 'test-only' } });
+    const ensure = vi.spyOn(Service, 'ensure');
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"version":"2.2.5"}'));
+    const adapter = new OpenCodeAdapter();
+    expect((await adapter.probe()).liveEvents).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:49374/api/info', expect.objectContaining({
+      headers: { authorization: expect.stringMatching(/^Basic /) }
+    }));
+    expect(ensure).not.toHaveBeenCalled();
   });
 
-  it('does not infer running from a recent database update or an old compaction marker', () => {
-    const store = new CollectorStore(':memory:');
-    const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+  it('does not fall back to a V1 server or a database when discovery is empty', async () => {
+    vi.spyOn(Service, 'discover').mockResolvedValue(undefined);
+    const fetch = vi.spyOn(globalThis, 'fetch');
     const adapter = new OpenCodeAdapter();
-    adapter['ctx'] = { emit: event => engine.ingest(event), reportHealth: () => {}, getSetting: () => undefined, setSetting: () => {} };
-    const row = JSON.parse(readFileSync(join(process.cwd(), 'fixtures', 'opencode', 'sessions.json'), 'utf8'))[0] as OpenCodeSessionRow;
-    adapter.emitSessionRow(null, { ...row, time_updated: Date.now(), time_compacting: Date.now() - 86400000 });
-    expect(engine.state.runs[`opencode:${row.id}`].status).toBe('idle');
-    expect(adapter.sessionAlive(row.id)).toBeUndefined();
-    store.close();
+    expect((await adapter.probe()).liveEvents).toBe(false);
+    expect(adapter.health().status).toBe('off');
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('reconciles removed busy entries to idle and drops liveness on connection failure', async () => {
-    const store = new CollectorStore(':memory:');
-    const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+  it('reconciles identity, usage, busy-to-idle, older active sessions and connection loss', async () => {
+    const { store, engine, ctx } = fixture();
     const adapter = new OpenCodeAdapter();
-    adapter['ctx'] = { emit: event => engine.ingest(event), reportHealth: () => {}, getSetting: () => undefined, setSetting: () => {} };
-    adapter['serviceUrl'] = 'http://existing-server';
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    adapter['ctx'] = ctx;
+    adapter['serviceUrl'] = 'http://test';
+    const fetch = vi.spyOn(globalThis, 'fetch');
     try {
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ses_one: { type: 'busy' } })));
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ses_one', directory: 'P:/real-project', title: 'Actual session' })));
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([{ info: { id: 'msg_one', role: 'assistant' }, parts: [{ type: 'text', text: 'Latest session message' }] }])));
+      fetch.mockResolvedValueOnce(Response.json({ data: [session()] }));
       await adapter.reconcileSessionStatuses();
+      expect(engine.state.runs['opencode:ses_one']).toMatchObject({ status: 'running', projectName: 'real-project' });
       expect(adapter.sessionAlive('ses_one')).toBe(true);
-      expect(engine.state.runs['opencode:ses_one'].status).toBe('running');
-      expect(engine.state.runs['opencode:ses_one'].projectName).toBe('real-project');
-      expect(engine.state.runs['opencode:ses_one'].recentMessages?.[0].preview).toBe('Latest session message');
-      const row = JSON.parse(readFileSync(join(process.cwd(), 'fixtures', 'opencode', 'sessions.json'), 'utf8'))[0] as OpenCodeSessionRow;
-      adapter.emitSessionRow(null, { ...row, id: 'ses_one', time_compacting: 1 });
-      expect(engine.state.runs['opencode:ses_one'].status).toBe('running');
-      expect(engine.state.runs['opencode:ses_one'].projectName).toBe('real-project');
-      fetchMock.mockResolvedValueOnce(new Response('{}'));
-      fetchMock.mockResolvedValueOnce(new Response('[]'));
+      const totals = store.getUsageSummary(0, Date.now(), []);
+      expect(totals.tokensIn).toBe(100);
+      fetch.mockResolvedValueOnce(Response.json({ data: [] }));
+      fetch.mockResolvedValueOnce(Response.json({ data: { ...session(), time: { created: 100, updated: 300, busy: 150, idle: 300 } } }));
+      await adapter.reconcileSessionStatuses();
+      expect(fetch).toHaveBeenLastCalledWith('http://test/api/session/ses_one', expect.anything());
+      expect(engine.state.runs['opencode:ses_one'].status).toBe('idle');
+      expect(store.getUsageSummary(0, Date.now(), []).tokensIn).toBe(100);
+      fetch.mockRejectedValueOnce(new Error('Disconnected'));
+      await adapter.reconcileSessionStatuses();
+      expect(adapter.sessionAlive('ses_one')).toBeUndefined();
+      expect(adapter.health().status).toBe('degraded');
+    } finally { store.close(); }
+  });
+
+  it('does not treat recently updated idle metadata as running', async () => {
+    const { store, engine, ctx } = fixture();
+    const adapter = new OpenCodeAdapter();
+    adapter['ctx'] = ctx;
+    adapter['serviceUrl'] = 'http://test';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: [{ ...session(), time: { created: 100, updated: Date.now() } }] }));
+    try {
       await adapter.reconcileSessionStatuses();
       expect(engine.state.runs['opencode:ses_one'].status).toBe('idle');
       expect(adapter.sessionAlive('ses_one')).toBeUndefined();
-      // A delayed message on an already idle session must not resurrect Running.
-      fetchMock.mockResolvedValueOnce(new Response('{}'));
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([{ info: { id: 'msg_final', role: 'assistant' }, parts: [{ type: 'text', text: 'Finished' }] }])));
-      await adapter.reconcileSessionStatuses();
+    } finally { store.close(); }
+  });
+
+  it('imports paginated V2 history with a cutoff and idempotent totals', async () => {
+    const { store, engine, ctx } = fixture();
+    vi.spyOn(Service, 'discover').mockResolvedValue({ url: 'http://test', auth: undefined });
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = String(input);
+      if (url.endsWith('/info')) return Response.json({ version: '2.2.5' });
+      if (url.includes('cursor=next')) return Response.json({ data: [session('ses_child')], cursor: {} });
+      return Response.json({ data: [session()], cursor: { next: 'next' } });
+    });
+    try {
+      for (let i = 0; i < 2; i++) expect(await new OpenCodeAdapter().importHistory(ctx, 100, 0)).toBe(2);
+      expect(fetch.mock.calls.some(([url]) => String(url).includes('cursor=next'))).toBe(true);
+      expect(engine.state.runs['opencode:ses_one']).toMatchObject({ historical: true, status: 'idle' });
+      expect(store.getUsageSummary(0, Date.now(), []).tokensIn).toBe(200);
+    } finally { store.close(); }
+  });
+
+  it('replays V2 activity, attention and completion envelopes', async () => {
+    const { store, engine, ctx } = fixture();
+    try {
+      const adapter = new OpenCodeAdapter();
+      adapter['ctx'] = ctx;
+      adapter['emitSession'](session());
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: { ...session(), time: { created: 100, updated: 406, busy: 150, idle: 406 } } }));
+      for (const line of readFileSync('fixtures/opencode/events.jsonl', 'utf8').trim().split('\n')) {
+        const raw = JSON.parse(line);
+        await adapter['handleEvent'](raw);
+        if (raw.type === 'permission.asked') expect(engine.state.runs['opencode:ses_one'].status).toBe('waiting');
+      }
       expect(engine.state.runs['opencode:ses_one'].status).toBe('idle');
       expect(engine.state.runs['opencode:ses_one'].recentMessages?.[0].preview).toBe('Finished');
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ses_one: { type: 'busy' } })));
-      fetchMock.mockResolvedValueOnce(new Response('[]'));
-      await adapter.reconcileSessionStatuses();
-      fetchMock.mockRejectedValueOnce(new Error('Disconnected'));
-      await adapter.reconcileSessionStatuses();
-      expect(adapter.sessionAlive('ses_one')).toBeUndefined();
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ses_unknown: { type: 'busy' } })));
-      fetchMock.mockResolvedValueOnce(new Response('Not found', { status: 404 }));
-      await adapter.reconcileSessionStatuses();
-      expect(engine.state.runs['opencode:ses_unknown']).toBeUndefined();
+      expect(normalizeOpenCodeSseEvent({ type: 'session.status', properties: { sessionID: 'ses_one', status: { type: 'busy' } } })).toEqual([]);
+    } finally { store.close(); }
+  });
+
+  it('consumes split SSE frames, hydrates new sessions, and cancels the stream on stop', async () => {
+    const { store, engine, ctx } = fixture();
+    const server = createServer((req, res) => {
+      if (req.url === '/api/event') {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        const event = JSON.stringify({ type: 'session.text.ended', data: { sessionID: 'ses_one', assistantMessageID: 'msg_one', ordinal: 0, text: 'Live preview' } });
+        res.write(`data: ${event.slice(0, 30)}`);
+        res.write(`${event.slice(30)}\r\n\r\n`);
+      } else {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(req.url === '/api/info' ? { version: '2.2.5' } : { data: req.url === '/api/session/ses_one' ? session() : [] }));
+      }
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address() as { port: number };
+    const adapter = new OpenCodeAdapter({ serviceUrlOverride: `http://127.0.0.1:${address.port}` });
+    try {
+      await adapter.start(ctx);
+      await vi.waitFor(() => expect(engine.state.runs['opencode:ses_one']?.recentMessages?.[0]?.preview).toBe('Live preview'));
+      expect(engine.state.runs['opencode:ses_one'].projectName).toBe('real-project');
     } finally {
-      fetchMock.mockRestore();
+      await adapter.stop();
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
       store.close();
     }
-  });
-
-  it('parses OpenCode model JSON and plain strings', () => {
-    expect(parseOpenCodeModel('{"id":"gpt-5.6-luna-fast","providerID":"openai"}')).toBe(
-      'gpt-5.6-luna-fast'
-    );
-    expect(parseOpenCodeModel('claude-sonnet-4')).toBe('claude-sonnet-4');
-  });
-
-  it('replays fixtures/opencode/sessions.json and fixtures/opencode/events.jsonl deterministically', () => {
-    const store = new CollectorStore(':memory:');
-    const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
-    const adapter = new OpenCodeAdapter({ dbPath: 'nonexistent.db' });
-
-    adapter['ctx'] = {
-      emit: (ev) => engine.ingest(ev),
-      reportHealth: (h) => engine.reportAdapterHealth(h),
-      getSetting: (k) => store.getSetting(k),
-      setSetting: (k, v) => store.setSetting(k, v)
-    };
-
-    const sessionsRaw = readFileSync(
-      join(process.cwd(), 'fixtures', 'opencode', 'sessions.json'),
-      'utf8'
-    );
-    const sessions = JSON.parse(sessionsRaw) as OpenCodeSessionRow[];
-    for (const s of sessions) {
-      adapter.emitSessionRow(null, s, 'polled');
-    }
-
-    const parentRun = engine.state.runs['opencode:ses_opencode_fixture_1'];
-    const childRun = engine.state.runs['opencode:ses_opencode_fixture_child'];
-    expect(parentRun).toBeDefined();
-    expect(childRun).toBeDefined();
-    expect(parentRun.children).toContain('opencode:ses_opencode_fixture_child');
-    expect(parentRun.usage.tokensIn).toBe(412000);
-    expect(parentRun.usage.tokensOut).toBe(18000);
-    expect(parentRun.usage.costUsd).toBe(0.1425);
-    expect(parentRun.usage.precision).toBe('exact');
-    expect(parentRun.usage.costSource).toBe('tool');
-
-    // Replay SSE events from fixtures/opencode/events.jsonl
-    const eventsLines = readFileSync(
-      join(process.cwd(), 'fixtures', 'opencode', 'events.jsonl'),
-      'utf8'
-    )
-      .trim()
-      .split(/\r?\n/);
-
-    for (const line of eventsLines) {
-      const raw = JSON.parse(line) as Record<string, unknown>;
-      const normalized = normalizeOpenCodeSseEvent(raw, 1792731210000);
-      for (const ev of normalized) {
-        engine.ingest(ev);
-      }
-    }
-
-    const updatedParent = engine.state.runs['opencode:ses_opencode_fixture_1'];
-    expect(updatedParent.todos).toHaveLength(2);
-    expect(updatedParent.todos[0].status).toBe('completed');
-    expect(updatedParent.status).toBe('done');
-    store.close();
   });
 });

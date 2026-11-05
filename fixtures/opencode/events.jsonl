@@ -1,7 +1,7 @@
-{"type":"session.updated","properties":{"info":{"id":"ses_opencode_fixture_1","directory":"T:/R4/sample-api","title":"Refactor MCP auth middleware","agent":"build","model":{"id":"gpt-5.6-luna","providerID":"openai"},"time":{"created":1792730000000,"updated":1792731205000}}}}
-{"type":"message.part.updated","properties":{"part":{"id":"prt_1","sessionID":"ses_opencode_fixture_1","type":"tool","tool":"edit","state":{"status":"running","input":{"filePath":"src/Mcp/OAuth/PkceFlow.cs"}}}}}
-{"type":"message.part.updated","properties":{"part":{"id":"prt_1","sessionID":"ses_opencode_fixture_1","type":"tool","tool":"edit","state":{"status":"completed","input":{"filePath":"src/Mcp/OAuth/PkceFlow.cs"},"time":{"start":1792731205000,"end":1792731207000}}}}}
-{"type":"todo.updated","properties":{"sessionID":"ses_opencode_fixture_1","todos":[{"position":1,"content":"Audit PKCE token verifier","status":"completed"},{"position":2,"content":"Add unit tests for PkceFlow","status":"in_progress"}]}}
-{"type":"permission.updated","properties":{"id":"perm_1","sessionID":"ses_opencode_fixture_1","title":"dotnet test --filter PkceFlowTests","metadata":{"command":"dotnet test --filter PkceFlowTests"}}}
-{"type":"permission.replied","properties":{"id":"perm_1","sessionID":"ses_opencode_fixture_1"}}
-{"type":"session.idle","properties":{"sessionID":"ses_opencode_fixture_1"}}
+{"type":"permission.asked","created":400,"data":{"sessionID":"ses_one","id":"perm_one","action":"shell","resources":[],"save":[]}}
+{"type":"permission.replied","created":401,"data":{"sessionID":"ses_one","id":"perm_one"}}
+{"type":"session.tool.input.started","created":402,"data":{"sessionID":"ses_one","assistantMessageID":"msg_one","id":"call_one","name":"shell"}}
+{"type":"session.tool.called","created":403,"data":{"sessionID":"ses_one","assistantMessageID":"msg_one","id":"call_one","input":{"command":"git status"},"executed":true}}
+{"type":"session.tool.success","created":404,"data":{"sessionID":"ses_one","assistantMessageID":"msg_one","id":"call_one","content":"clean","executed":true}}
+{"type":"session.text.ended","created":405,"data":{"sessionID":"ses_one","assistantMessageID":"msg_one","ordinal":0,"text":"Finished"}}
+{"type":"session.execution.succeeded","created":406,"data":{"sessionID":"ses_one"}}

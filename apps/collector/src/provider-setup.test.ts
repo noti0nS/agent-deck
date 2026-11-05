@@ -110,13 +110,13 @@ describe('provider setup', () => {
     expect(prompts.multiselect).not.toHaveBeenCalled();
   });
 
-  it('constructs only enabled provider adapters and excludes disabled history sources', () => {
+  it('constructs only enabled provider adapters and excludes disabled history sources', async () => {
     const { store } = fixture();
     expect(createProviderAdapters(['codex']).map(a => a.source)).toEqual(['codex']);
     const claude = vi.spyOn(ClaudeAdapter.prototype, 'scanTranscripts');
     const agy = vi.spyOn(AgyAdapter.prototype, 'pollConversations');
     const codex = vi.spyOn(CodexAdapter.prototype, 'scanRolloutFiles').mockReturnValue(0);
-    runHistoryBackfill(new CollectorEngine({ store }), { providers: ['codex'] });
+    await runHistoryBackfill(new CollectorEngine({ store }), { providers: ['codex'] });
     expect(codex).toHaveBeenCalled();
     expect(claude).not.toHaveBeenCalled(); expect(agy).not.toHaveBeenCalled();
     expect(store.getSetting<{ providers: string[] }>('last_history_import')?.providers).toEqual(['codex']);

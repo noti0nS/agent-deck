@@ -113,8 +113,13 @@ from a `.env` file. Set custom DB/port values consistently in CLI/MCP terminals.
 | `AGENT_DECK_IMPORT_HISTORY` | enabled | `0` skips automatic bulk history import |
 | `AGENT_DECK_UDP_ADDR` | `127.0.0.1:4101` | Claude shim ingest address |
 | `AGENT_DECK_SKIP_HOOKS` | unset | `1` skips compiling the shim |
-| `OPENCODE_SERVER_URL` | `http://127.0.0.1:4096` | Existing OpenCode server to observe |
+| `OPENCODE_SERVER_URL` | Registered local V2 service | Optional existing OpenCode V2 server override |
 | `AGENT_DECK_CLAUDE_COMMAND` | platform CLI name | Installed Claude executable |
+
+OpenCode integration requires V2. Agent Deck discovers and authenticates with the
+existing local service; it never starts OpenCode. Sessions, usage, history, and
+live events come from the V2 API, with no V1 or SQLite fallback. An explicit URL
+override bypasses local service discovery and its managed authentication.
 
 ## Compatibility
 

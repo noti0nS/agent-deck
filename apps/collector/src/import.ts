@@ -1,10 +1,8 @@
-import { existsSync } from 'node:fs';
 import type { CollectorEngine } from './http.js';
 import { AgyAdapter } from './adapters/agy.js';
 import { ClaudeAdapter } from './adapters/claude.js';
 import { CodexAdapter } from './adapters/codex.js';
-import { OpenCodeAdapter, type OpenCodeSessionRow } from './adapters/opencode.js';
-import { withReadonlySqlite } from './adapters/readonly-sqlite.js';
+import { OpenCodeAdapter } from './adapters/opencode.js';
 import type { Provider } from './provider-setup.js';
 
 export interface HistoryImportResult {
@@ -20,18 +18,18 @@ export interface HistoryImportResult {
  * Tags imported rows with `historical: true` and uses idempotent sample keys
  * so re-running `agent-deck import` never double-counts tokens or cost.
  */
-export function runHistoryBackfill(
+export async function runHistoryBackfill(
   engine: CollectorEngine,
   options?: {
     providers?: Provider[];
     days?: number;
     maxPerSource?: number;
-    opencodeDbPath?: string;
+    opencodeServiceUrl?: string;
     claudeProjectsDir?: string;
     codexSessionsDir?: string;
     agyBaseDir?: string;
   }
-): HistoryImportResult {
+): Promise<HistoryImportResult> {
   const startMs = Date.now();
   const days = options?.days ?? 90;
   const maxPerSource = options?.maxPerSource ?? 100;
@@ -57,33 +55,8 @@ export function runHistoryBackfill(
 
   // 1. OpenCode backfill
   if (!options?.providers || options.providers.includes('opencode')) {
-    const opencode = new OpenCodeAdapter({ dbPath: options?.opencodeDbPath });
-    opencode['ctx'] = ctx;
-    if (existsSync(opencode.dbPath)) {
-      try {
-        withReadonlySqlite(opencode.dbPath, (db) => {
-          const rows = db
-            .prepare(
-              `SELECT id, parent_id, directory, title, agent, model, cost,
-                      tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
-                      time_created, time_updated, time_compacting,
-                      summary_additions, summary_deletions, summary_files
-               FROM session
-               WHERE time_updated >= ?
-               ORDER BY time_updated DESC
-               LIMIT ?`
-            )
-            .all(cutoffTs, maxPerSource) as OpenCodeSessionRow[];
-
-          for (const r of rows.reverse()) {
-            opencode.emitSessionRow(db, r, 'inferred', true);
-            opencodeSessions += 1;
-          }
-        });
-      } catch {
-        // ignore
-      }
-    }
+    const opencode = new OpenCodeAdapter({ serviceUrlOverride: options?.opencodeServiceUrl });
+    opencodeSessions = await opencode.importHistory(ctx, maxPerSource, cutoffTs);
   }
 
   // 2. Claude Code backfill
