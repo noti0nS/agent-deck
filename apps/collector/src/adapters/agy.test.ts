@@ -1,11 +1,149 @@
 import Database from 'better-sqlite3';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { PRICE_TABLE, setPriceTable } from '@agent-deck/pricing';
+import { catalogPriceTable } from '../model-catalog.js';
 import { CollectorEngine } from '../http.js';
 import { CollectorStore } from '../store.js';
 import { AgyAdapter, readAgyLatestMessage } from './agy.js';
+import { decodeAgyUsageBlob, priceAgyUsage } from './agy-usage.js';
+
+// Synthetic protobuf messages using the field layout observed in AGY 1.5.1.
+function varint(value: number | bigint): Buffer {
+  let n = BigInt(value);
+  const bytes: number[] = [];
+  do { bytes.push(Number(n & 127n) | (n > 127n ? 128 : 0)); n >>= 7n; } while (n);
+  return Buffer.from(bytes);
+}
+function field(number: number, value: number | bigint | string | Buffer): Buffer {
+  if (typeof value === 'number' || typeof value === 'bigint') return Buffer.concat([varint(number * 8), varint(value)]);
+  const bytes = Buffer.from(value);
+  return Buffer.concat([varint(number * 8 + 2), varint(bytes.length), bytes]);
+}
+function generation(model: string, id = 'generation-1', counts: Record<number, number> = { 2: 100_000, 3: 40_000, 4: 10_000, 5: 200_000, 9: 10_000, 10: 30_000 }): Buffer {
+  return Buffer.concat([
+    field(1, Buffer.concat([
+      field(4, Buffer.concat([...Object.entries(counts).map(([n, value]) => field(Number(n), value)), field(11, id)])),
+      field(19, model), field(9, Buffer.concat([field(4, field(1, 1_793_836_800)), field(7, 0xffffffffffffffffn)]))
+    ])),
+    field(4, 'shared-execution')
+  ]);
+}
+const usageCatalog = {
+  anthropic: { models: { 'claude-opus-5-5': { cost: { input: 2, output: 10, cache_read: 0.5, cache_write: 2.5 } } } },
+  google: { models: { 'gemini-3.8-flash': { cost: { input: 1, output: 5, cache_read: 0.25, cache_write: 1.25 } } } }
+};
+afterEach(() => setPriceTable(PRICE_TABLE));
+
+describe('AGY native usage', () => {
+  it('decodes uncached input, cache and inclusive output without charging reasoning twice', () => {
+    setPriceTable(catalogPriceTable(usageCatalog, 1));
+    const usage = decodeAgyUsageBlob(generation('claude-opus-5-5-medium'))!;
+    expect(usage).toMatchObject({ model: 'claude-opus-5-5-medium', responseId: 'generation-1',
+      tokensIn: 100_000, tokensOut: 30_000, tokensReasoning: 10_000, cacheRead: 200_000, cacheWrite: 10_000,
+      ts: 1_793_836_800_000 });
+    expect(priceAgyUsage(usage)).toEqual({ model: 'claude-opus-5-5', cost: 0.725 });
+    expect(priceAgyUsage({ ...usage, model: 'gemini-3.8-flash-n' })).toEqual({ model: 'gemini-3.8-flash', cost: 0.3625 });
+    expect(priceAgyUsage({ ...usage, model: 'placeholder', modelName: 'Gemini 3.8 Flash (High)' }).model).toBe('gemini-3.8-flash');
+    expect(priceAgyUsage({ ...usage, model: 'MODEL_PLACEHOLDER_M999' }).cost).toBeUndefined();
+  });
+
+  it('uses total output when the response breakdown is absent or disagrees and accepts cache-only usage', () => {
+    expect(decodeAgyUsageBlob(generation('model', 'id', { 2: 1, 3: 50 }))).toMatchObject({ tokensOut: 50, tokensReasoning: 0 });
+    expect(decodeAgyUsageBlob(generation('model', 'id', { 3: 50, 9: 20, 10: 99 }))).toMatchObject({ tokensOut: 30, tokensReasoning: 20 });
+    expect(decodeAgyUsageBlob(generation('model', 'id', { 9: 20, 10: 30 }))).toMatchObject({ tokensOut: 30, tokensReasoning: 20 });
+    expect(decodeAgyUsageBlob(generation('model', 'id', { 5: 100 }))).toMatchObject({ tokensIn: 0, tokensOut: 0, cacheRead: 100 });
+    expect(decodeAgyUsageBlob('{"output_tokens":20,"model":"test","input_tokens":100}')).toMatchObject({ tokensIn: 100, tokensOut: 20 });
+  });
+
+  it('rejects corrupt, truncated and unsafe counters instead of searching prompt text for token-shaped JSON', () => {
+    const valid = generation('claude-opus-5-5-medium');
+    for (let length = 0; length < valid.length; length++) {
+      // A valid complete root field may survive removal of the optional generation ID.
+      if (length === valid.indexOf(field(4, 'shared-execution'))) continue;
+      expect(decodeAgyUsageBlob(valid.subarray(0, length))).toBeNull();
+    }
+    for (const blob of [
+      Buffer.from([0]), Buffer.from([0x0a, 0xff]), Buffer.from([0x0f]),
+      field(1, field(4, field(2, 2n ** 60n))),
+      field(1, field(4, field(2, '100'))),
+      field(3, '{"input_tokens":100,"output_tokens":20}'),
+      generation('model', 'id', { 3: 1, 9: 2 }),
+      '{"input_tokens":-1,"output_tokens":20}',
+      '{"input_tokens":1.5,"output_tokens":20}'
+    ]) expect(decodeAgyUsageBlob(blob)).toBeNull();
+  });
+
+  it('prices every generation across model switches, late writes, history replay and collector restarts', () => {
+    setPriceTable(catalogPriceTable(usageCatalog, 1));
+    const dir = mkdtempSync(join(tmpdir(), 'deck-agy-usage-'));
+    mkdirSync(join(dir, 'conversations'));
+    const path = join(dir, 'conversations', 'session.db');
+    const db = new Database(path);
+    db.exec('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, has_subtrajectory INTEGER, metadata BLOB, error_details BLOB, permissions BLOB, task_details BLOB, step_payload BLOB); CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB); INSERT INTO steps (idx,status) VALUES (100,3)');
+    const insert = db.prepare('INSERT INTO gen_metadata VALUES (?, ?)');
+    insert.run(0, generation('claude-opus-5-5-medium'));
+    let store = new CollectorStore(join(dir, 'collector.db'));
+    let engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+    const makeAdapter = () => {
+      const adapter = new AgyAdapter({ baseDir: dir, udpPort: 0 });
+      adapter['ctx'] = { emit: e => { engine.ingest(e); }, reportHealth: () => {},
+        getSetting: k => store.getSetting(k), setSetting: (k, v) => store.setSetting(k, v) };
+      return adapter;
+    };
+    try {
+      const adapter = makeAdapter();
+      expect(adapter.ingestConversationDb('session', path)).toBe(100);
+      expect(engine.state.runs['agy:session'].usage).toMatchObject({ costUsd: 0.725, precision: 'derived', costSource: 'estimated' });
+      insert.run(1, generation('gemini-3.8-flash-n', 'generation-2'));
+      // The step cursor is much larger than this newly committed generation index.
+      adapter.ingestConversationDb('session', path, undefined, 100);
+      expect(engine.state.runs['agy:session']).toMatchObject({ model: 'gemini-3.8-flash', usage: { tokensIn: 200_000, costUsd: 1.0875 } });
+      const before = store.getUsageSummary(0, Date.now(), []);
+      insert.run(2, generation('gemini-3.8-flash-n', 'generation-2')); // same native generation
+      adapter.ingestConversationDb('session', path);
+      expect(store.getUsageSummary(0, Date.now(), []).estimatedCostUsd).toBe(before.estimatedCostUsd);
+      store.close();
+      store = new CollectorStore(join(dir, 'collector.db'));
+      engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+      const restarted = makeAdapter();
+      restarted.ingestConversationDb('session', path);
+      restarted.ingestConversationDb('session', path);
+      expect(engine.state.runs['agy:session'].usage).toMatchObject({ tokensIn: 200_000, tokensOut: 60_000, tokensReasoning: 20_000, costUsd: 1.0875 });
+      expect(store.getUsageSummary(0, Date.now(), [])).toMatchObject({ tokensIn: 200_000, estimatedCostUsd: 1.0875, exactCostUsd: 0 });
+      expect(restarted.health().capabilities.usagePrecision).toBe('derived');
+    } finally { db.close(); store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('retries unchanged databases after catalog refresh, preserves hook state and marks unknown usage partial', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'deck-agy-refresh-'));
+    mkdirSync(join(dir, 'conversations'));
+    const path = join(dir, 'conversations', 'session.db');
+    const db = new Database(path);
+    db.exec('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, has_subtrajectory INTEGER, metadata BLOB, error_details BLOB, permissions BLOB, task_details BLOB, step_payload BLOB); CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB)');
+    db.prepare('INSERT INTO gen_metadata VALUES (0, ?)').run(generation('claude-opus-5-5-medium'));
+    const store = new CollectorStore(':memory:');
+    const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+    const adapter = new AgyAdapter({ baseDir: dir, udpPort: 0 });
+    adapter['ctx'] = { emit: e => { engine.ingest(e); }, reportHealth: () => {}, getSetting: () => undefined, setSetting: () => {} };
+    try {
+      adapter.ingestHookDatagram({ _agent_deck_source: 'agy', hook_event_name: 'PreInvocation', conversationId: 'session', modelName: 'Claude Opus 5.5 (Medium)' });
+      adapter.pollConversations();
+      expect(engine.state.runs['agy:session'].usage).toMatchObject({ costSource: 'none', precision: 'partial', tokensIn: 100_000 });
+      expect(adapter.pollConversations()).toBe(0);
+      setPriceTable(catalogPriceTable(usageCatalog, 2));
+      expect(adapter.pollConversations()).toBe(1);
+      expect(engine.state.runs['agy:session']).toMatchObject({ status: 'running', model: 'claude-opus-5-5', usage: { tokensIn: 100_000, costUsd: 0.725, precision: 'derived' } });
+      expect(store.getUsageSummary(0, Date.now(), [])).toMatchObject({ tokensIn: 100_000, estimatedCostUsd: 0.725 });
+      db.prepare('INSERT INTO gen_metadata VALUES (1, ?)').run(generation('unpriced-model', 'generation-2'));
+      utimesSync(path, new Date(), new Date(Date.now() + 1000));
+      adapter.pollConversations();
+      expect(engine.state.runs['agy:session'].usage).toMatchObject({ tokensIn: 200_000, costUsd: 0.725, precision: 'partial' });
+    } finally { db.close(); store.close(); rmSync(dir, { recursive: true, force: true }); }
+  });
+});
 
 describe('AgyAdapter & SQLite Fixture Replay', () => {
   it('does not treat an empty conversation database as an active session, and can observe its later activity', () => {

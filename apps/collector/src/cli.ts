@@ -263,12 +263,18 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   if (cmd === 'import') {
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
-    const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
-    const res = await runHistoryBackfill(engine, { providers });
-    console.log(
-      `History backfill complete in ${res.durationMs}ms: opencode=${res.opencodeSessions}, claudeLines=${res.claudeLines}, codexLines=${res.codexLines}, agy=${res.agyConversations}`
-    );
-    store.close();
+    const modelCatalog = new ModelCatalogSync(store);
+    try {
+      await modelCatalog.sync();
+      const engine = new CollectorEngine({ store, batchIntervalMs: 0 });
+      const res = await runHistoryBackfill(engine, { providers });
+      console.log(
+        `History backfill complete in ${res.durationMs}ms: opencode=${res.opencodeSessions}, claudeLines=${res.claudeLines}, codexLines=${res.codexLines}, agy=${res.agyConversations}`
+      );
+    } finally {
+      await modelCatalog.stop();
+      store.close();
+    }
     return 0;
   }
 

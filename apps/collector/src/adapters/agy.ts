@@ -5,9 +5,12 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { AdapterHealth, Capabilities, Confidence, RunStatus } from '@agent-deck/core';
+import { getPriceTable } from '@agent-deck/pricing';
 import type { Adapter, AdapterContext, EmitEventInput } from '../adapter-spi.js';
 import { withReadonlySqlite } from './readonly-sqlite.js';
 import { AGY_HOOKS_PATH, AgyHookNormalizer, agyHooksInstalled } from './agy-hooks.js';
+import { decodeAgyUsageBlob, priceAgyUsage, type AgyUsage } from './agy-usage.js';
+export { decodeAgyUsageBlob } from './agy-usage.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -99,28 +102,6 @@ export function decodeAgyPermissions(blob: Buffer | string | null | undefined): 
   return text.slice(0, 140);
 }
 
-/**
- * Attempts to decode token usage from agy `gen_metadata` or `executor_metadata` blobs.
- * If no trustworthy token counter is present, returns `null` so the adapter honestly
- * reports `none` rather than fabricating `0` (§5.5, §7.1, M5 exit criterion).
- */
-export function decodeAgyUsageBlob(blob: Buffer | string | null | undefined): {
-  tokensIn: number;
-  tokensOut: number;
-} | null {
-  if (!blob) return null;
-  const text = Buffer.isBuffer(blob) ? blob.toString('utf8') : String(blob);
-  const jsonMatch = text.match(/\{[^{}]*"input_tokens"\s*:\s*(\d+)[^{}]*"output_tokens"\s*:\s*(\d+)[^{}]*\}/);
-  if (jsonMatch) {
-    const tokensIn = Number(jsonMatch[1] || 0);
-    const tokensOut = Number(jsonMatch[2] || 0);
-    if (tokensIn > 0 || tokensOut > 0) {
-      return { tokensIn, tokensOut };
-    }
-  }
-  return null;
-}
-
 export interface AgyAdapterOptions {
   baseDir?: string;
   pollIntervalMs?: number;
@@ -166,7 +147,7 @@ export class AgyAdapter implements Adapter {
   private hookActivity = new Map<string, { ts: number; working: boolean }>();
   private ctx?: AdapterContext;
   private pollTimer: NodeJS.Timeout | null = null;
-  private dbMtimes = new Map<string, { mtimeMs: number; lastStepIdx: number; summary?: string; transcriptMtime?: number }>();
+  private dbMtimes = new Map<string, { mtimeMs: number; lastStepIdx: number; summary?: string; transcriptMtime?: number; pricingVersion: string }>();
   private latestMessages = new Map<string, string>();
   private currentHealth: AdapterHealth;
 
@@ -215,9 +196,8 @@ export class AgyAdapter implements Adapter {
     const caps: Capabilities = {
       // Daemon registration is global and does not provide session events.
       liveEvents: hooksInstalled && this.udpSocket !== null,
-      // Per §5.5 & M5: gen_metadata blobs do not contain reliable token counters unless JSON metadata is present;
-      // report 'none' by default so UI honestly omits cost footer instead of printing $0.00.
-      usagePrecision: 'none',
+      // Confirmed only after observing decodable generation counters.
+      usagePrecision: this.currentHealth.capabilities.usagePrecision,
       attention: hasDb,
       subagents: hasDb,
       notes
@@ -382,11 +362,12 @@ export class AgyAdapter implements Adapter {
 
     for (const file of dbFiles.slice(0, maxConversations).reverse()) {
       const prev = this.dbMtimes.get(file.path);
+      const pricingVersion = getPriceTable().version;
       const summaryKey = JSON.stringify(summaries.get(file.id));
       const transcriptPath = join(this.baseDir, 'brain', file.id, '.system_generated', 'logs', 'transcript.jsonl');
       let transcriptMtime = 0;
       try { transcriptMtime = statSync(transcriptPath).mtimeMs; } catch { /* optional */ }
-      if (prev && prev.mtimeMs === file.mtimeMs && prev.summary === summaryKey && prev.transcriptMtime === transcriptMtime) {
+      if (prev && prev.mtimeMs === file.mtimeMs && prev.summary === summaryKey && prev.transcriptMtime === transcriptMtime && prev.pricingVersion === pricingVersion) {
         continue;
       }
       const lastStepIdx = this.ingestConversationDb(
@@ -396,7 +377,7 @@ export class AgyAdapter implements Adapter {
         prev?.lastStepIdx ?? -1,
         file.mtimeMs
       );
-      this.dbMtimes.set(file.path, { mtimeMs: file.mtimeMs, lastStepIdx, summary: summaryKey, transcriptMtime });
+      this.dbMtimes.set(file.path, { mtimeMs: file.mtimeMs, lastStepIdx, summary: summaryKey, transcriptMtime, pricingVersion });
       updatedCount += 1;
     }
 
@@ -468,7 +449,7 @@ export class AgyAdapter implements Adapter {
               projectName,
               title,
               subtitle: summary?.preview?.trim() || undefined,
-              model: summary?.agent_name || 'gemini-2.5-pro',
+              model: summary?.agent_name || 'unknown',
               confidence,
               startedAt: mtimeMs
             }
@@ -536,27 +517,45 @@ export class AgyAdapter implements Adapter {
           }
         }
 
-        // Check gen_metadata for decodable token usage; if none, keep precision 'none'
+        // Generation indices are independent of step indices. Recompute cumulative
+        // totals so polling, late writes, history replay and restarts stay idempotent.
         try {
           const genRows = db
-            .prepare('SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx ASC')
-            .all(afterStepIdx) as Array<{ idx: number; data: Buffer | string }>;
+            .prepare('SELECT idx, data FROM gen_metadata ORDER BY idx ASC')
+            .all() as Array<{ idx: number; data: Buffer | string }>;
+          const generations = new Map<string, AgyUsage>();
+          let partial = false;
           for (const g of genRows) {
             const usage = decodeAgyUsageBlob(g.data);
-            if (usage) {
-              this.emitPolled({
-                type: 'usage.tick',
-                runId,
-                ts: mtimeMs,
-                payload: {
-                  sampleKey: `agy:${convId}:gen:${g.idx}`,
-                  tokensInDelta: usage.tokensIn,
-                  tokensOutDelta: usage.tokensOut,
-                  costSource: 'none',
-                  precision: 'partial'
-                }
-              });
+            if (usage) generations.set(usage.responseId ?? `idx:${g.idx}`, usage);
+            else partial = true;
+          }
+          if (generations.size) {
+            const totals = { tokensInTotal: 0, tokensOutTotal: 0, tokensReasoningTotal: 0, cacheReadTotal: 0, cacheWriteTotal: 0 };
+            let cost: number | undefined;
+            let model = 'unknown';
+            let latestTs = 0;
+            for (const usage of generations.values()) {
+              const priced = priceAgyUsage(usage, summary?.agent_name ?? undefined);
+              model = priced.model;
+              totals.tokensInTotal += usage.tokensIn;
+              totals.tokensOutTotal += usage.tokensOut;
+              totals.tokensReasoningTotal += usage.tokensReasoning;
+              totals.cacheReadTotal += usage.cacheRead;
+              totals.cacheWriteTotal += usage.cacheWrite;
+              latestTs = Math.max(latestTs, usage.ts ?? mtimeMs);
+              if (priced.cost === undefined) partial = true;
+              else cost = (cost ?? 0) + priced.cost;
             }
+            cost = cost === undefined ? undefined : Number(cost.toFixed(6));
+            const precision = partial ? 'partial' : 'derived';
+            // Usage identity must update even when lifecycle hooks suppress polled state.
+            this.ctx!.emit({ type: 'run.updated', runId, ts: latestTs, payload: { model } });
+            this.emitPolled({ type: 'usage.tick', runId, ts: latestTs, payload: {
+              ...totals, costUsdTotal: cost, costSource: cost === undefined ? 'none' : 'estimated', precision,
+              sampleKey: `${runId}:usage_total:${Object.values(totals).join(':')}:${cost ?? 'unpriced'}`
+            } });
+            this.currentHealth.capabilities.usagePrecision = precision;
           }
         } catch {
           // ignore

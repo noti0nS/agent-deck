@@ -39,6 +39,11 @@ Snapshot configuration identifies the active price-table version and timestamp.
 Codex estimates treat cached input and reasoning output as subsets of total tokens;
 Claude's cache counters are separate from its uncached input counter.
 
+AGY now decodes native generation metadata, including cache and reasoning, and
+estimates each generation using its model before emitting cumulative session
+totals. Catalog refreshes retry unpriced AGY snapshots without duplicating tokens.
+See [AGY usage details and validation boundaries](agy-usage.md).
+
 ## Read-only MCP bridge
 
 Start the collector normally, then configure an MCP client to launch:
