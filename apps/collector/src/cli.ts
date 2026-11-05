@@ -28,8 +28,17 @@ import { ModelCatalogSync } from './model-catalog.js';
 import { runMcp } from './mcp.js';
 import { collectorPort, collectorUrl, checkCollector, privateLanUrl, type LanListener } from './config.js';
 import { readProviderSetup, setupProviders, type Provider } from './provider-setup.js';
+import { discoverLanHost } from './lan-discovery.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function printPairing(engine: CollectorEngine, url: string) {
+  const { code } = engine.pairing.generatePairingCode();
+  console.log('  Scan to open Agent Deck on your tablet');
+  console.log(renderAsciiQr(`${url}?code=${code}`));
+  console.log(url);
+  console.log(`                             code: ${code}  (expires 5 min)`);
+}
 
 export function getDefaultCollectorDbPath(): string {
   return process.env.AGENT_DECK_DB_PATH || join(homedir(), '.agent-deck', 'collector.db');
@@ -55,11 +64,14 @@ From source: npm run agent-deck doctor (no -- separator needed for commands).
 First run asks which providers to enable. Run setup again to change them.
 Non-interactive: npm run agent-deck setup providers codex,opencode (or none).
 Hook repair: setup claude / setup agy. Network access: setup tailscale.
+LAN pairing: pair starts the collector if stopped; use pair --host <private-IPv4> to choose an address.
 Help and doctor are always available without setup.`;
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
-  const cmd = argv[0] || 'start';
+  let cmd = argv[0] || 'start';
   const args = argv.slice(1);
+  let pairOnStart = false;
+  let pairingHost: string | undefined;
   if (['help', '--help', '-h'].includes(cmd) || args.includes('--help')) { console.log(usage); return 0; }
   if (!['start', 'status', 'doctor', 'setup', 'probe', 'devices', 'uninstall', 'pair', 'run', 'import', 'mcp'].includes(cmd)) {
     console.error(`Unknown command: ${cmd}\n${usage}`); return 1;
@@ -275,30 +287,37 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
     const engine = new CollectorEngine({ store });
-    if (args.includes('--local')) {
+    if (args.length === 1 && args[0] === '--local') {
       const { code } = engine.pairing.generatePairingCode();
       console.log(`Local browser pairing code: ${code} (expires 5 min; no tablet QR)`);
       store.close();
       return 0;
     }
-    // The collector may have been started in another terminal with different env.
-    const listener = store.getSetting<LanListener>('lan_listener');
-    const lanUrl = privateLanUrl(listener);
-    if (!lanUrl || !await checkCollector(lanUrl)) {
-      console.error('No running LAN listener was found. Tailscale users do not need pairing.');
-      console.error('For local Wi-Fi, restart the collector with AGENT_DECK_LAN_HOST set to this PC\'s private IPv4 address.');
-      console.error('Windows: ./start-local-wifi.ps1 -LanAddress <PC-private-IPv4>');
-      store.close();
+    try {
+      if (args.length && !(args.length === 2 && args[0] === '--host' && args[1])) {
+        throw new Error('Usage: agent-deck pair [--host <PC-private-IPv4> | --local]');
+      }
+      const explicitHost = args[1] || process.env.AGENT_DECK_LAN_HOST;
+      const listener = store.getSetting<LanListener>('lan_listener');
+      const lanUrl = privateLanUrl(listener);
+      if (!lanUrl || (explicitHost && explicitHost !== listener?.host) || !await checkCollector(lanUrl)) {
+        if (await checkCollector()) {
+          throw new Error('Collector is already running without the requested LAN access. Press Ctrl+C in its terminal, then run npm run agent-deck pair again.');
+        }
+        pairingHost = await discoverLanHost(explicitHost);
+        console.log('Starting collector with LAN access for pairing.');
+        pairOnStart = true;
+        cmd = 'start';
+      }
+      if (!pairOnStart) {
+        if (!lanUrl || !await checkCollector(lanUrl)) throw new Error('LAN listener is not reachable. Run doctor for diagnostics.');
+        printPairing(engine, lanUrl);
+        return 0;
+      }
+    } catch (error) {
+      console.error((error as Error).message);
       return 1;
-    }
-    const { code } = engine.pairing.generatePairingCode();
-    const qr = renderAsciiQr(`${lanUrl}?code=${code}`);
-    console.log('  Scan to open Agent Deck on your tablet');
-    console.log(qr);
-    console.log(lanUrl);
-    console.log(`                             code: ${code}  (expires 5 min)`);
-    store.close();
-    return 0;
+    } finally { store.close(); }
   }
 
   if (cmd === 'status') {
@@ -322,7 +341,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       staticDir: existsSync(staticDir) ? staticDir : undefined
     });
     const host = process.env.AGENT_DECK_HOST || '127.0.0.1';
-    const lanHost = process.env.AGENT_DECK_LAN_HOST;
+    const lanHost = pairingHost || process.env.AGENT_DECK_LAN_HOST;
     let lanApp: Awaited<ReturnType<typeof buildHttpServer>> | undefined;
     const cleanup = async () => {
       if (lanApp) { lanApp.server.closeAllConnections(); await lanApp.close(); }
@@ -337,7 +356,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       if (lanHost && !privateLanUrl({ host: lanHost, port })) throw new Error('AGENT_DECK_LAN_HOST must be a specific private IPv4 address.');
       // Claim listeners before starting adapters, imports, or background jobs.
       await app.listen({ port, host });
-      if (lanHost) {
+      if (lanHost && lanHost !== host) {
         lanApp = await buildHttpServer(engine, { staticDir: existsSync(staticDir) ? staticDir : undefined });
         await lanApp.listen({ port, host: lanHost });
       }
@@ -363,6 +382,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       throw error;
     }
     if (lanHost) console.log(`Local Wi-Fi: http://${lanHost}:${port} (device pairing required)`);
+    if (pairOnStart) printPairing(engine, privateLanUrl({ host: lanHost!, port })!);
     const tsAddress = findTailscaleAddress();
     const tailscaleUrl = await getTailscaleMagicDnsUrl(port);
     console.log(

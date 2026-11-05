@@ -83,29 +83,33 @@ different service on the selected port. Set `AGENT_DECK_SERVE_HTTPS_PORT` to ano
 port if needed. Starting the collector does not change Serve configuration.
 Do not enable Funnel or another public proxy.
 
-**Private LAN without Tailscale:** select the PC's private IPv4 address (shown by
-`ipconfig` on Windows or your network settings). In PowerShell:
+**Private LAN without Tailscale:** run on the PC:
 
 ```powershell
-./start-local-wifi.ps1 -LanAddress 192.168.1.23
-```
-
-On Ubuntu:
-
-```sh
-AGENT_DECK_LAN_HOST=192.168.1.23 npm run agent-deck start
-```
-
-Replace the example address with your own. Allow inbound TCP on the configured
-port only from your private subnet. In another terminal in this checkout:
-
-```sh
 npm run agent-deck pair
 ```
 
+The command detects the LAN address using the operating system's default route,
+starts the collector with LAN access, and displays a pairing QR. Keep this terminal
+open while using the dashboard. No separate Wi-Fi script is required.
+
+If the collector is already running without LAN access, the command asks you to
+stop it with Ctrl+C in its terminal, then run `pair` again. It does not stop or
+reconfigure that process. If LAN is already enabled, it generates another code.
+
+If detection is ambiguous, choose the PC's private IPv4 address explicitly:
+
+```sh
+npm run agent-deck pair --host 192.168.1.23
+```
+
+Replace the example address with your own. Allow inbound TCP on the configured
+port only from your private subnet. `AGENT_DECK_LAN_HOST` and the Windows
+`start-local-wifi.ps1` script remain available for manual startup.
+
 The collector records its LAN address, so the second terminal does not need to
 inherit its environment variables. Scan the QR; the code expires after five
-minutes and is single-use. `pair` refuses to generate a tablet QR unless a LAN
+minutes and is single-use. `pair` generates a tablet QR only after the LAN
 listener is running; it never substitutes localhost. Set `AGENT_DECK_DB_PATH` in
 both terminals if you use a custom database. Regenerate a code for each device.
 If DHCP changes the PC's address, restart with the new address and open that URL.

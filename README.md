@@ -45,15 +45,17 @@ Tailscale access rules authorize access; no Agent Deck pairing is required.
 Setup refuses to replace a different service on the selected port. Starting the
 collector does not modify Tailscale Serve.
 
-**Private LAN without Tailscale:** start with `AGENT_DECK_LAN_HOST` set to the
-PC's private IPv4 address. Windows example (replace the address):
+**Private LAN without Tailscale:** run:
 
 ```powershell
-./start-local-wifi.ps1 -LanAddress 192.168.1.23
+npm run agent-deck pair
 ```
 
-Then run `npm run agent-deck pair` in another terminal and scan the QR. It uses
-the running collector's recorded LAN address, never localhost. Each code is
+It detects the PC's LAN address, starts the collector, and displays a QR. Keep
+that terminal open. If the collector is already running without LAN access,
+stop it with Ctrl+C first and run `pair` again. If LAN is already enabled, `pair`
+just generates another code. Use `pair --host 192.168.1.23` to select an address
+when automatic detection is ambiguous. Each code is
 single-use and valid for five minutes. LAN HTTP is for trusted networks; HTTPS
 is required for normal PWA installation. [Detailed setup](docs/installation.md).
 
@@ -77,7 +79,7 @@ Use `npm run agent-deck COMMAND` from source, or
 | `setup agy [--dry-run]` | Install reversible Antigravity observer hooks |
 | `setup tailscale` | Explicitly configure trusted HTTPS access |
 | `uninstall [claude\|agy]` | Remove only Agent Deck hooks |
-| `pair` | Generate a single-use LAN pairing code and QR |
+| `pair` | Start with LAN access if stopped, then generate a single-use code and QR |
 | `devices list` | List paired LAN browsers (no token values) |
 | `devices revoke ID` | Revoke one LAN device |
 | `devices revoke-all` | Revoke all LAN devices and outstanding code |

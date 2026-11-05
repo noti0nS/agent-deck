@@ -106,7 +106,7 @@ it('revocation closes an already connected LAN event stream', async () => {
   } finally { await engine.stopAdapters(); await app.close(); }
 });
 
-it('pair in another terminal uses persisted LAN address and refuses a missing listener', async () => {
+it('pair in another terminal reuses the persisted LAN address and instructs stopping a collector without LAN', async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'agent-deck-pair-test-'));
   const dbPath = join(scratch, 'test.db');
   const configured = new CollectorStore(dbPath);
@@ -116,10 +116,11 @@ it('pair in another terminal uses persisted LAN address and refuses a missing li
   vi.stubEnv('AGENT_DECK_LAN_HOST', '');
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-  const fetchMock = vi.fn().mockResolvedValue(new Response('{"status":"ok"}', { status: 200 }));
+  const fetchMock = vi.fn().mockImplementation(async () => new Response('{"status":"ok"}', { status: 200 }));
   vi.stubGlobal('fetch', fetchMock);
   try {
-    expect(await runCli(['pair'])).toBe(1);
+    expect(await runCli(['pair', '--host', '192.168.1.23'])).toBe(1);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('Press Ctrl+C'));
     expect(log).not.toHaveBeenCalled();
     const db = new CollectorStore(dbPath);
     db.setSetting('lan_listener', { host: '192.168.1.23', port: 4200 });
