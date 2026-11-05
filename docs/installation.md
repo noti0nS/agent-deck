@@ -3,6 +3,55 @@
 Agent Deck is experimental. Begin on your own computer; enable network access
 only after choosing Tailscale or private-LAN access as described below.
 
+## npm CLI
+
+Once the first npm release is published:
+
+```sh
+npm install -g agent-deck
+agent-deck --version
+agent-deck start
+```
+
+Run `agent-deck` from any directory. The first start runs provider setup; open
+http://127.0.0.1:4100 and keep the terminal running. Ctrl+C stops the collector.
+Node.js 22.22+ or 24 and npm 10+ are required. Windows and Linux x64/ARM64 are
+package targets; see [actual validation boundaries](compatibility.md).
+The package contains the compiled CLI, dashboard and prebuilt Go hooks.
+Git, Go, a source checkout and a TypeScript compiler are not required.
+[Native Node dependencies](#native-dependencies) still need compatible binaries
+or a local C++ toolchain.
+
+Use `agent-deck COMMAND` in place of `npm run agent-deck COMMAND` throughout
+this guide. Pass flags directly, for example `agent-deck setup agy --dry-run`.
+If PowerShell blocks the launcher, use `agent-deck.cmd`. If the command is not
+found, ensure npm's global executable directory is on PATH (`npm prefix -g` on
+Windows; the `bin` directory under that prefix on Linux), then open a new terminal.
+
+Stop the collector before updating:
+
+```sh
+npm install -g agent-deck@latest
+agent-deck --version
+agent-deck start
+```
+
+Data and provider selections stay in `~/.agent-deck/collector.db`. Hook paths remain
+stable when updating the same global prefix. If migrating from a source checkout
+or changing npm prefixes, uninstall the old hooks first, then run `agent-deck setup`
+from the new install to register its paths.
+
+To uninstall, stop the collector and remove its observer hooks before the package:
+
+```sh
+agent-deck uninstall claude
+agent-deck uninstall agy
+npm uninstall -g agent-deck
+```
+
+User data is retained. Tailscale mappings and LAN firewall rules, if configured,
+are removed separately as described under [recovery](#update-uninstall-and-recovery).
+
 ## From source
 
 Install Git, Node.js 22.22+ or 24, npm 10+, and Go 1.22+.
@@ -65,7 +114,7 @@ node apps/collector/dist/cli.js start
 The bundle includes compiled CLI/packages, static dashboard and the platform's
 Go hook shim. It does not require Go or TypeScript. Native dependency installation
 has the same possible C++ toolchain requirement described above. It is not a
-single executable or an npm-registry package. Use `node apps/collector/dist/cli.js`
+single executable; it is separate from the npm CLI package. Use `node apps/collector/dist/cli.js`
 in place of `npm run agent-deck --` for the commands below when using a bundle.
 
 ## Tablet access: choose one

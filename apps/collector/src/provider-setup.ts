@@ -54,7 +54,7 @@ export function saveProviderSetup(store: CollectorStore, providers: Provider[], 
   const claudePath = join(home, '.claude', 'settings.json');
   const agyPath = join(home, '.gemini', 'config', 'hooks.json');
   const needsHooks = providers.includes('claude') || providers.includes('agy');
-  if (needsHooks && !existsSync(commandPath)) throw new Error('Hook shim missing. Run npm run build:hooks, then retry setup.');
+  if (needsHooks && !existsSync(commandPath)) throw new Error('Hook shim missing. Reinstall agent-deck, or run npm run build:hooks in a source checkout.');
   if (providers.includes('claude')) setupClaudeHooks({ settingsPath: claudePath, commandPath, dryRun: true });
   if (providers.includes('agy')) setupAgyHooks({ hooksPath: agyPath, commandPath, dryRun: true });
   const removeClaude = !providers.includes('claude') && hasOwnedHooks(claudePath, removeAgentDeckHooksFromSettings);
@@ -86,7 +86,7 @@ export async function setupProviders(store: CollectorStore, commandPath: string,
     return true;
   }
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    console.error('Provider setup needs an interactive terminal. Run npm run agent-deck setup, or npm run agent-deck setup providers codex,opencode (use none for no providers).');
+    console.error('Provider setup needs an interactive terminal. Run agent-deck setup, or agent-deck setup providers codex,opencode (use none for no providers).');
     return false;
   }
   let previous: ProviderSetup | undefined;

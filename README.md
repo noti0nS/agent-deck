@@ -11,6 +11,31 @@ change their work. Native hook installation is explicit and reversible.
 
 ## Quick start
 
+### Install the CLI
+
+For published npm releases, install once and run from any directory:
+
+```sh
+npm install -g agent-deck
+agent-deck start
+```
+
+Requires **Node.js 22.22+ or 24** and npm 10+ on Windows or Linux (x64/ARM64).
+The package includes the dashboard and prebuilt observer hooks; no repository,
+Git, Go or TypeScript build is needed. Native Node dependencies may need a C++
+toolchain if a compatible prebuilt binary is unavailable. ARM64 hooks are
+cross-compiled; see [validation boundaries](docs/compatibility.md).
+
+Open <http://127.0.0.1:4100> and keep the terminal running. First startup asks which
+providers to enable. Use `agent-deck setup` to change them, `agent-deck doctor`
+for diagnostics, and `agent-deck --version` to check the installed version.
+On Windows, use `agent-deck.cmd` if PowerShell blocks the generated `.ps1` launcher.
+
+Update with `npm install -g agent-deck@latest` after stopping the collector.
+[Installation and uninstall details](docs/installation.md#npm-cli).
+
+### Run from source
+
 Requirements: Git, **Node.js 22.22+ or 24**, npm 10+, and Go 1.22+ for the hook shim.
 Native Node modules may require a C++ toolchain if prebuilt binaries are unavailable.
 
@@ -64,7 +89,8 @@ Funnel.
 
 ## Commands
 
-Use `npm run agent-deck COMMAND` from source, or
+Use `agent-deck COMMAND` after an npm installation,
+`npm run agent-deck COMMAND` from source, or
 `node apps/collector/dist/cli.js COMMAND` from a runtime bundle.
 
 | Command | Purpose |
@@ -73,6 +99,7 @@ Use `npm run agent-deck COMMAND` from source, or
 | `status` | Check configured address/port; exit 1 if offline |
 | `doctor` | Report actual collector reachability and adapter diagnostics |
 | `help` | Show CLI usage without running setup |
+| `--version` | Print the installed version without running setup |
 | `setup` | Select enabled providers and install/remove their observer hooks |
 | `setup providers codex,opencode` | Save an explicit selection without prompts; use `none` for no providers |
 | `setup claude [--dry-run]` | Install reversible Claude observer hooks |
@@ -130,7 +157,7 @@ prices are not invented, and estimated costs can differ from provider billing.
 
 See the [platform/agent matrix](docs/compatibility.md),
 [integration contracts and MCP](docs/integration-compatibility.md), and
-[fixture provenance](fixtures/manifest.json). Test CI runs on Ubuntu; release packages target Windows and Ubuntu;
+[fixture provenance](fixtures/manifest.json). npm package CI targets Windows and Ubuntu;
 check actual results before treating a platform or native CLI version as verified.
 
 ## Development

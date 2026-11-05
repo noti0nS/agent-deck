@@ -9,6 +9,9 @@ published artifacts and their platform validation status.
   with a PTY fallback for other CLIs.
 - Mobile/tablet dashboard, usage estimates, detail views and local history.
 - Dependency-ordered build and platform-specific runtime bundle preparation.
+- Installable npm CLI distribution with bundled workspaces/dashboard, prebuilt
+  Windows/Linux x64/ARM64 hooks, global `agent-deck` commands and `--version`.
+- Isolated npm install/runtime/uninstall smoke checks and a trusted-publishing workflow.
 - Explicit Tailscale setup that refuses to replace another service.
 - Individually revocable LAN sessions; single-use pairing codes; minimal public health.
 - Portable LAN configuration and diagnostics that honor the configured port.

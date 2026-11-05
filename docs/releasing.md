@@ -20,7 +20,66 @@
 
 Do not present configured CI jobs as successful runs. Record native CLI versions
 separately from the build/test matrix. Do not publish npm workspaces individually:
-the supported distribution is the source tree or the assembled runtime archive.
+the npm CLI bundles the internal packages into one distribution.
+
+## npm CLI package
+
+The root remains a private development workspace. `release:npm` generates a
+separate publishable manifest and a file-allowlisted tarball; do not run `npm publish`
+at the repository root or remove its `private` flag.
+
+```sh
+npm ci
+npm run build
+npm run typecheck
+npm test
+npm run test:hooks
+npm run release:npm
+npm run release:npm:smoke
+```
+
+The result is `.release/npm/agent-deck-VERSION.tgz`, using the root package version.
+It contains one bundled CLI (internal workspaces included), dashboard assets,
+documentation/licenses, and Go hooks for Windows/Linux x64/ARM64. External runtime
+dependencies, including native modules, are installed by npm. No install-time hook
+download or Go compilation is performed. ARM64 binaries are cross-compiled, not
+runtime-verified by the x64 matrix.
+
+The smoke check installs the actual tarball into an isolated global npm prefix
+outside the checkout, then exercises the generated command, version/help, provider
+setup and hook removal, native PTY/SQLite, dashboard assets/API, status exit codes,
+and npm uninstall. It uses a temporary home and database, leaving real agent
+settings and the user's global npm installation alone.
+
+### First publication
+
+The `agent-deck` npm name must be available to your npm account. Authenticate
+interactively (never put a token in the repository) and publish the tested tarball:
+
+```sh
+npm login
+npm publish .release/npm/agent-deck-1.0.0.tgz --access public
+```
+
+Substitute the current version if it changed. npm may require browser/2FA
+confirmation. Verify with `npm view agent-deck version` and a fresh
+`npm install -g agent-deck`. A local tarball build does not mean it is published.
+
+### Subsequent releases from GitHub Actions
+
+Configure the npm package's **Trusted Publisher** for GitHub Actions:
+owner `noti0nS`, repository `agent-deck`, workflow filename `npm.yml`.
+This uses short-lived OIDC authentication, not a stored npm token. The repository
+must be public for the workflow's `--provenance` publication.
+
+Update the version/changelog, push a matching `vVERSION` tag, then manually run
+the **npm package** workflow on that tag (for example
+`gh workflow run npm.yml --ref v1.0.1`). A manual run on a branch is rejected;
+using the tag as the workflow ref keeps publication provenance tied to the code
+being packaged. The workflow checks the version,
+builds and smoke-tests on Windows/Ubuntu with Node 22.22 and 24, and publishes the
+tested Ubuntu/Node 24 tarball only after all four jobs pass. Pushes and pull requests
+validate packages but do not publish. Each npm version can be published only once.
 
 Sanitizing current files does not remove earlier Git versions. If prior history
 contains information that must remain private, review a history rewrite or a

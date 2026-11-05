@@ -20,6 +20,8 @@
     "agent-deck": "node --import tsx apps/collector/src/cli.ts",
     "release:bundle": "node tools/prepare-release.mjs",
     "release:smoke": "node tools/smoke-release.mjs",
+    "release:npm": "node tools/prepare-npm.mjs",
+    "release:npm:smoke": "node tools/smoke-npm.mjs",
     "verify:clean": "node tools/verify-clean.mjs"
   },
   "bin": {
@@ -34,6 +36,8 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.5",
     "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tar": "^7.5.22",
     "tsx": "^4.19.3",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
