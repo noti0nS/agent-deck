@@ -29,6 +29,7 @@ import { runMcp } from './mcp.js';
 import { collectorPort, collectorUrl, checkCollector, privateLanUrl, type LanListener } from './config.js';
 import { readProviderSetup, setupProviders, type Provider } from './provider-setup.js';
 import { discoverLanHost } from './lan-discovery.js';
+import { formatHelp } from './cli-help.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -66,14 +67,7 @@ export function createProviderAdapters(providers: Provider[], enableAgyRemoteCon
   });
 }
 
-const usage = `Usage: agent-deck <start|status|doctor|setup|probe|devices|uninstall|pair|run|import|mcp>
-Options: --help, --version
-From source: npm run agent-deck doctor (no -- separator needed for commands).
-First run asks which providers to enable. Run setup again to change them.
-Non-interactive: npm run agent-deck setup providers codex,opencode (or none).
-Hook repair: setup claude / setup agy. Network access: setup tailscale.
-LAN pairing: pair starts the collector if stopped; use pair --host <private-IPv4> to choose an address.
-Help and doctor are always available without setup.`;
+const usage = formatHelp()!;
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   let cmd = argv[0] || 'start';
@@ -84,7 +78,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   }
   let pairOnStart = false;
   let pairingHost: string | undefined;
-  if (['help', '--help', '-h'].includes(cmd) || args.includes('--help')) { console.log(usage); return 0; }
+  const ownArgs = args.includes('--') ? args.slice(0, args.indexOf('--')) : args;
+  if (['help', '--help', '-h'].includes(cmd) || ownArgs.some(arg => ['--help', '-h'].includes(arg))) {
+    const topic = cmd === 'help' ? args[0] : ['--help', '-h'].includes(cmd) ? undefined : cmd;
+    const text = formatHelp(topic);
+    if (!text) { console.error(`Unknown help topic: ${topic}\nRun agent-deck help to list commands.`); return 1; }
+    console.log(text); return 0;
+  }
   if (!['start', 'status', 'doctor', 'setup', 'probe', 'devices', 'uninstall', 'pair', 'run', 'import', 'mcp'].includes(cmd)) {
     console.error(`Unknown command: ${cmd}\n${usage}`); return 1;
   }
@@ -211,34 +211,48 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   }
 
   if (cmd === 'doctor') {
+    if (args.some(arg => arg !== '--json')) {
+      console.error(formatHelp('doctor')); return 1;
+    }
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
-    const adapters = [
-      new OpenCodeAdapter(),
-      new ClaudeAdapter({ udpPort: 0 }),
-      new CodexAdapter(),
-      new AgyAdapter(),
-      new PtyAdapter()
-    ];
-    for (const a of adapters) {
-      await a.probe();
-    }
-    const tsUrl = await getTailscaleMagicDnsUrl(collectorPort());
-    const report = {
-      generatedAt: Date.now(),
-      nodeVersion: process.version,
-      platform: process.platform,
-      collectorRunning: await checkCollector(),
-      collectorUrl: collectorUrl(),
-      tailscaleUrl: tsUrl,
-      dbSizeBytes: store.getDbSizeBytes(),
-      adapters: adapters.map((a) => adapterHealthToDoctor(a.health()))
-    };
-    console.log(formatDoctorReport(report));
-    console.log('Provider rows show local detection and capabilities, not active collector connections.');
-    if (!report.collectorRunning) console.log('Start the collector in a separate terminal and keep it open: agent-deck start');
-    store.close();
-    return 0;
+    try {
+      let enabledProviders: Provider[] | undefined;
+      let setupError: string | undefined;
+      try { enabledProviders = readProviderSetup(store)?.providers; }
+      catch (error) { setupError = (error as Error).message; }
+      const adapters = [
+        new OpenCodeAdapter(),
+        new ClaudeAdapter({ udpPort: 0 }),
+        new CodexAdapter(),
+        new AgyAdapter(),
+        new PtyAdapter()
+      ];
+      const adapterReports = await Promise.all(adapters.map(async a => {
+        try { await a.probe(); return adapterHealthToDoctor(a.health()); }
+        catch (error) {
+          return { ...adapterHealthToDoctor(a.health()), status: 'degraded' as const, lastError: (error as Error).message };
+        }
+      }));
+      const tsUrl = await getTailscaleMagicDnsUrl(collectorPort());
+      const report = {
+        generatedAt: Date.now(),
+        nodeVersion: process.version,
+        platform: process.platform,
+        collectorRunning: await checkCollector(),
+        collectorUrl: collectorUrl(),
+        tailscaleUrl: tsUrl,
+        dbSizeBytes: store.getDbSizeBytes(),
+        dbPath,
+        enabledProviders,
+        setupError,
+        webAvailable: existsSync(join(getDefaultWebBuildDir(), 'index.html')),
+        hookAvailable: existsSync(commandPath),
+        adapters: adapterReports
+      };
+      console.log(args.includes('--json') ? JSON.stringify(report, null, 2) : formatDoctorReport(report));
+      return 0;
+    } finally { store.close(); }
   }
 
   if (cmd === 'setup' && (args[0] === 'claude' || args[0] === 'agy')) {

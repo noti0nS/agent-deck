@@ -116,6 +116,12 @@ Use `agent-deck COMMAND` after an npm installation,
 | `mcp` | Read-only stdio bridge for an MCP client |
 
 `doctor` and `help` work before setup. Running with no command starts the collector.
+Use `agent-deck help pair` (or `agent-deck pair -h`) for command-specific
+options and examples. Doctor separates enabled providers from local detection,
+checks web/hook assets, and lists actionable next steps. Unselected providers
+are informational; detection does not prove an active collector connection.
+Use `agent-deck doctor --json` for a machine-readable report. Doctor exits 0
+when it produces a report, even if checks need attention.
 Plain commands need no npm separator: `npm run agent-deck doctor`. To forward
 flags through npm, use `npm run agent-deck -- setup agy --dry-run`.
 Non-interactive first runs require an explicit provider selection before starting.
