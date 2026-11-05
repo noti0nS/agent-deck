@@ -212,6 +212,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       adapters: adapters.map((a) => adapterHealthToDoctor(a.health()))
     };
     console.log(formatDoctorReport(report));
+    console.log('Provider rows show local detection and capabilities, not active collector connections.');
+    if (!report.collectorRunning) console.log('Start the collector in a separate terminal and keep it open: npm run agent-deck start');
     store.close();
     return 0;
   }
@@ -310,46 +312,57 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     const dbPath = getDefaultCollectorDbPath();
     const store = new CollectorStore(dbPath);
     const modelCatalog = new ModelCatalogSync(store);
-    modelCatalog.start();
     const staticDir = getDefaultWebBuildDir();
     const engine = new CollectorEngine({
       store,
       staticDir: existsSync(staticDir) ? staticDir : undefined
     });
 
-    // Bootstrap first-run 90-day history backfill if not yet run (§7.3)
-    const importedProviders = store.getSetting<{ providers?: Provider[] }>('last_history_import')?.providers ?? [];
-    const pendingProviders = providers.filter(provider => !importedProviders.includes(provider));
-    if (process.env.AGENT_DECK_IMPORT_HISTORY !== '0' && pendingProviders.length) {
-      runHistoryBackfill(engine, { providers: pendingProviders });
-    }
-
-    for (const adapter of createProviderAdapters(providers, engine.state.prefs.enableAgyRemoteControl)) engine.registerAdapter(adapter);
-    engine.registerAdapter(new PtyAdapter());
-    await engine.startAdapters();
-
     const app = await buildHttpServer(engine, {
       staticDir: existsSync(staticDir) ? staticDir : undefined
     });
-    app.addHook('onClose', async () => { await modelCatalog.stop(); });
-
-    // Bind loopback (127.0.0.1) or Tailscale IP — never 0.0.0.0 (P6, §9, §10.3)
     const host = process.env.AGENT_DECK_HOST || '127.0.0.1';
-    if (host === '0.0.0.0' || host === '::') {
-      throw new Error('Refusing to bind 0.0.0.0: Agent Deck binds only loopback or Tailscale interface (P6).');
-    }
-
-    await app.listen({ port, host });
-    // Opt-in LAN listener shares the engine, but remote clients must pair.
     const lanHost = process.env.AGENT_DECK_LAN_HOST;
-    store.setSetting('lan_listener', null);
-    if (lanHost) {
-      if (!privateLanUrl({ host: lanHost, port })) throw new Error('AGENT_DECK_LAN_HOST must be a specific private IPv4 address.');
-      const lanApp = await buildHttpServer(engine, { staticDir: existsSync(staticDir) ? staticDir : undefined });
-      await lanApp.listen({ port, host: lanHost });
-      store.setSetting('lan_listener', { host: lanHost, port });
-      console.log(`Local Wi-Fi: http://${lanHost}:${port} (device pairing required)`);
+    let lanApp: Awaited<ReturnType<typeof buildHttpServer>> | undefined;
+    const cleanup = async () => {
+      if (lanApp) { lanApp.server.closeAllConnections(); await lanApp.close(); }
+      app.server.closeAllConnections();
+      await app.close();
+      await engine.stopAdapters();
+      await modelCatalog.stop();
+      store.close();
+    };
+    try {
+      if (host === '0.0.0.0' || host === '::') throw new Error('Refusing wildcard bind; use a specific local address.');
+      if (lanHost && !privateLanUrl({ host: lanHost, port })) throw new Error('AGENT_DECK_LAN_HOST must be a specific private IPv4 address.');
+      // Claim listeners before starting adapters, imports, or background jobs.
+      await app.listen({ port, host });
+      if (lanHost) {
+        lanApp = await buildHttpServer(engine, { staticDir: existsSync(staticDir) ? staticDir : undefined });
+        await lanApp.listen({ port, host: lanHost });
+      }
+      store.setSetting('lan_listener', lanHost ? { host: lanHost, port } : null);
+      modelCatalog.start();
+      // Bootstrap first-run 90-day history backfill if not yet run (§7.3)
+      const importedProviders = store.getSetting<{ providers?: Provider[] }>('last_history_import')?.providers ?? [];
+      const pendingProviders = providers.filter(provider => !importedProviders.includes(provider));
+      if (process.env.AGENT_DECK_IMPORT_HISTORY !== '0' && pendingProviders.length) {
+        runHistoryBackfill(engine, { providers: pendingProviders });
+      }
+
+      for (const adapter of createProviderAdapters(providers, engine.state.prefs.enableAgyRemoteControl)) engine.registerAdapter(adapter);
+      engine.registerAdapter(new PtyAdapter());
+      await engine.startAdapters();
+
+    } catch (error) {
+      await cleanup();
+      if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use. Run npm run agent-deck doctor. Stop the existing collector in its terminal before restarting, or choose another AGENT_DECK_PORT.`);
+        return 1;
+      }
+      throw error;
     }
+    if (lanHost) console.log(`Local Wi-Fi: http://${lanHost}:${port} (device pairing required)`);
     const tsAddress = findTailscaleAddress();
     const tailscaleUrl = await getTailscaleMagicDnsUrl(port);
     console.log(
@@ -357,6 +370,21 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
         (tsAddress ? ` (tailnet interface: ${tsAddress})` : '') +
         (tailscaleUrl ? ` -> ${tailscaleUrl}` : '')
     );
+    console.log('Keep this terminal open. Press Ctrl+C to stop. Run doctor in another terminal.');
+    // Own the foreground lifecycle explicitly, including graceful terminal shutdown.
+    await new Promise<void>(resolveStopped => {
+      const stopped = () => {
+        process.removeListener('SIGINT', stopped);
+        process.removeListener('SIGTERM', stopped);
+        app.server.removeListener('close', stopped);
+        resolveStopped();
+      };
+      process.once('SIGINT', stopped);
+      process.once('SIGTERM', stopped);
+      app.server.once('close', stopped);
+      app.server.ref();
+    });
+    await cleanup();
     return 0;
   }
 
