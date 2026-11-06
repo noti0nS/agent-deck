@@ -79,12 +79,13 @@ owner `noti0nS`, repository `agent-deck`, workflow filename `npm.yml`.
 This uses short-lived OIDC authentication, not a stored npm token. The repository
 must be public for the workflow's `--provenance` publication.
 
-Update the version/changelog, push a matching `vVERSION` tag, then manually run
-the **Publish npm package** workflow on that tag (for example
-`gh workflow run npm.yml --ref v1.0.1`). A manual run on a branch is rejected;
-using the tag as the workflow ref keeps publication provenance tied to the code
-being packaged. The workflow checks the version,
-builds and smoke-tests on Windows/Ubuntu with Node 22.22 and 24, and publishes the
+Update the version/changelog and push the commit, then manually run
+**Publish npm package** on `master` (for example
+`gh workflow run npm.yml --ref master`). The version comes from `package.json`
+at the selected workflow commit. You can also run on a `vVERSION` tag; when a
+tag is selected, it must match the package version (for example `v1.1.0`).
+The workflow builds, runs Playwright E2E checks, and smoke-tests on
+Windows/Ubuntu with Node 22.22 and 24, and publishes the
 tested Ubuntu/Node 24 tarball only after all four jobs pass. This workflow has only
 a `workflow_dispatch` trigger: pushes (including to `master`), pull requests and
 new tags do not run it. Each npm version can be published only once.
