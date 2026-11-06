@@ -3,15 +3,15 @@
 This is an experimental monitor, not a promise of support for all CLI versions.
 
 The initial locally validated platform is **Windows x64 with Node 24.19.0**.
-Ubuntu and Node 22 are validation targets, not certified support claims,
-until their actual CI runs succeed. Do not advertise them as verified yet.
+CI runs on Ubuntu x64 with Node 24 only. Windows and Node 22 are not currently
+CI-tested; previous local validation is separate from release validation.
 macOS is not included in CI or releases because it cannot currently be tested.
 
 | Component | Target | Evidence / limitation |
 | --- | --- | --- |
-| Runtime | Node 22.22+ and 24, npm 10+ | CI matrix; native dependencies must install for the OS/CPU |
+| Runtime | Node 22.22+ and 24, npm 10+ | CI tests Node 24 only; native dependencies must install for the OS/CPU |
 | Hook build | Go 1.22+ | Go unit tests and compiled-shim integration tests |
-| Windows | x64 | Local development platform; npm package CI target on Node 22.22 and 24 |
+| Windows | x64 | Local development platform; no Windows runtime CI |
 | Ubuntu | x64 | CI target; native agent compatibility needs separate evidence |
 | npm ARM64 | Windows/Linux ARM64 | Prebuilt Go hooks included; cross-compiled only, no ARM64 runtime CI; native Node dependencies may require compilation |
 | OpenCode V2 only | Registered service discovery/authentication; `/api/session` and `/api/event`; API history import | Tested against V2 2.2.5 and synthetic API/SSE contracts |

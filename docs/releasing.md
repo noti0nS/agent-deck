@@ -12,7 +12,7 @@
    Staging uses an explicit file allowlist; it excludes Git, source fixtures,
    design research, local databases, environment files and node_modules.
 5. Push the reviewed commit and tag. Run **Prepare draft release** with that
-   existing tag. It validates each platform, builds runtime archives, computes
+   existing tag. It validates Ubuntu with Node 24, builds a Linux runtime archive, computes
    SHA-256 checksums and creates an unpublished experimental draft.
 6. Review archive contents, screenshots and the actual platform test results.
    Enable GitHub private vulnerability reporting, secret scanning and push
@@ -84,9 +84,9 @@ Update the version/changelog and push the commit, then manually run
 `gh workflow run npm.yml --ref master`). The version comes from `package.json`
 at the selected workflow commit. You can also run on a `vVERSION` tag; when a
 tag is selected, it must match the package version (for example `v1.1.0`).
-The workflow builds, runs Playwright E2E checks, and smoke-tests on
-Windows/Ubuntu with Node 22.22 and 24, and publishes the
-tested Ubuntu/Node 24 tarball only after all four jobs pass. This workflow has only
+The workflow builds, runs Playwright E2E checks, and smoke-tests once on
+Ubuntu with Node 24, and publishes the tested tarball only after that job passes.
+Windows installation is not validated by CI. This workflow has only
 a `workflow_dispatch` trigger: pushes (including to `master`), pull requests and
 new tags do not run it. Each npm version can be published only once.
 
