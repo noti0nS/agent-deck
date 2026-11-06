@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- Command-specific help through `help <command>`, `--help`, and `-h`, with
+  usage examples, setup guidance, and environment options.
+- Richer doctor diagnostics with enabled-provider status, local detection,
+  web/hook asset checks, and actionable repair steps.
+- Machine-readable diagnostics through `agent-deck doctor --json`.
+
+### Fixed
+
+- Model usage displays “turns not reported” when turn metadata is unavailable,
+  instead of a misleading zero. This does not add missing provider turn counts.
+- Doctor continues reporting other providers when an individual probe fails,
+  and reports invalid provider setup without opening the setup wizard.
+- Help flags after the PTY wrapper's `--` separator reach the wrapped command.
+
+### Changed
+
+- Playwright E2E checks now gate the manual npm publishing workflow rather than
+  running on every push or pull request. Manual draft releases retain E2E checks.
+- Removed obsolete implementation-plan documents.
+
 ## 1.0.0 — experimental release preparation
 
 This version is being prepared for public preview; see GitHub Releases for
