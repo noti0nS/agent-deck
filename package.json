@@ -1,6 +1,6 @@
 {
   "name": "@noti0ns/agent-deck",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Tablet-first observability deck for AI coding agents (OpenCode, Claude Code, Codex, agy)",
   "license": "MIT",
