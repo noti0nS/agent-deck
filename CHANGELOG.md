@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Manual npm publishing accepts branch refs; selected release tags must still
+  match the version in `package.json`.
+
+### Changed
+
+- Validation, npm publishing checks, and draft runtime releases now run on
+  Ubuntu with Node 24 only. Draft runtime releases produce a Linux archive;
+  Windows and Node 22 are no longer CI-tested.
+- Updated Fastify to `^5.12.8`, Tailwind CSS and its Vite plugin to `^4.3.4`,
+  and `@types/better-sqlite3` to `^9.6.0`, with refreshed dependency locks.
+
 ## 1.1.0
 
 ### Added
