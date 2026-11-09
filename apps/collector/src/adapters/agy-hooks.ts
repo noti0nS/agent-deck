@@ -15,6 +15,15 @@ const owned = (value: unknown): boolean => record(value) && AGY_HOOK_EVENTS.ever
     && typeof handlers[0].command === 'string' && handlers[0].command.includes(` --source agy --event ${event} --udp-addr 127.0.0.1:`);
 });
 
+export function agyHookExecutable(commandPath: string, platform: string = process.platform): string {
+  // Avoid embedded quotes for any Windows path cmd.exe can parse unquoted:
+  // agy applies Win32 argv escaping before cmd.exe, turning every " into a
+  // literal \" token. Scoped npm installs (@scope) and similar characters are
+  // safe unquoted, so only whitespace and cmd metacharacters force quotes.
+  const needsQuotes = /[\s"&|<>^()%!]/.test(commandPath);
+  return platform === 'win32' && !needsQuotes ? commandPath : `"${commandPath}"`;
+}
+
 export function buildAgyHooks(existing: Record<string, unknown>, commandPath = 'agent-deck-hook', port = 4102): Record<string, unknown> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid Antigravity hook UDP port');
   if (/["\r\n]/.test(commandPath)) throw new Error('Invalid hook executable path');
@@ -22,13 +31,7 @@ export function buildAgyHooks(existing: Record<string, unknown>, commandPath = '
     throw new Error(`Hook name ${AGY_HOOK_NAME} belongs to another configuration; refusing to replace it`);
   }
   const observer: Record<string, unknown> = { ...(record(existing[AGY_HOOK_NAME]) ? existing[AGY_HOOK_NAME] : {}), enabled: true };
-  // Avoid embedded quotes for any Windows path cmd.exe can parse unquoted:
-  // agy applies Win32 argv escaping before cmd.exe, turning every " into a
-  // literal \" token. Scoped npm installs (@scope) and similar characters are
-  // safe unquoted, so only whitespace and cmd metacharacters force quotes.
-  const needsQuotes = /[\s"&|<>^()%!]/.test(commandPath);
-  const executable = process.platform === 'win32' && !needsQuotes
-    ? commandPath : `"${commandPath}"`;
+  const executable = agyHookExecutable(commandPath);
   for (const event of AGY_HOOK_EVENTS) {
     const handler = { type: 'command', command: `${executable} --source agy --event ${event} --udp-addr 127.0.0.1:${port}`, timeout: 1 };
     observer[event] = event === 'PreToolUse' || event === 'PostToolUse'

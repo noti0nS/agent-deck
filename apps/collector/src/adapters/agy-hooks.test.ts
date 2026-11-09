@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { CollectorEngine } from '../http.js';
 import { CollectorStore } from '../store.js';
 import { AgyAdapter } from './agy.js';
-import { AGY_HOOK_NAME, AgyHookNormalizer, agyHooksInstalled, buildAgyHooks, setupAgyHooks, uninstallAgyHooks } from './agy-hooks.js';
+import { AGY_HOOK_NAME, AgyHookNormalizer, agyHookExecutable, agyHooksInstalled, buildAgyHooks, setupAgyHooks, uninstallAgyHooks } from './agy-hooks.js';
 
 const common = { _agent_deck_source: 'agy', source: 'startup', conversationId: 'conversation-1', workspacePaths: ['P:\\projects\\demo'], modelName: 'gemini-test' };
 
@@ -30,11 +30,14 @@ describe('Antigravity native hooks configuration', () => {
 
   it('keeps paths that cmd.exe parses unquoted, including scoped npm installs', () => {
     const scopedPath = 'C:\\Users\\demo\\AppData\\Local\\nvm\\v24.13.1\\node_modules\\@noti0ns\\agent-deck\\tools\\hook-shim\\bin\\win32-x64\\agent-deck-hook.exe';
+    expect(agyHookExecutable(scopedPath, 'win32')).toBe(scopedPath);
+    expect(agyHookExecutable('C:\\Program Files\\agent-deck-hook.exe', 'win32')).toBe('"C:\\Program Files\\agent-deck-hook.exe"');
+    expect(agyHookExecutable('/opt/agent deck/agent-deck-hook', 'linux')).toBe('"/opt/agent deck/agent-deck-hook"');
     const command = (buildAgyHooks({}, scopedPath) as any)[AGY_HOOK_NAME].Stop[0].command as string;
-    expect(command).toBe(`${scopedPath} --source agy --event Stop --udp-addr 127.0.0.1:4102`);
-    expect(command).not.toContain('"');
-    const spaced = (buildAgyHooks({}, 'C:\\Program Files\\agent-deck-hook.exe') as any)[AGY_HOOK_NAME].Stop[0].command as string;
-    expect(spaced).toContain('"C:\\Program Files\\agent-deck-hook.exe"');
+    if (process.platform === 'win32') {
+      expect(command).toBe(`${scopedPath} --source agy --event Stop --udp-addr 127.0.0.1:4102`);
+      expect(command).not.toContain('"');
+    }
   });
 
   it('installs once, preserves all unrelated hooks and removes only the observer even after subsequent user edits', () => {
