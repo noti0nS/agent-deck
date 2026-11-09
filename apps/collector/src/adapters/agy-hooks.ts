@@ -22,9 +22,12 @@ export function buildAgyHooks(existing: Record<string, unknown>, commandPath = '
     throw new Error(`Hook name ${AGY_HOOK_NAME} belongs to another configuration; refusing to replace it`);
   }
   const observer: Record<string, unknown> = { ...(record(existing[AGY_HOOK_NAME]) ? existing[AGY_HOOK_NAME] : {}), enabled: true };
-  // Avoid embedded quotes for simple Windows paths: command launchers that
-  // apply Win32 argv escaping before cmd.exe turn them into literal \" characters.
-  const executable = process.platform === 'win32' && /^[a-zA-Z0-9_:.\\/\-]+$/.test(commandPath)
+  // Avoid embedded quotes for any Windows path cmd.exe can parse unquoted:
+  // agy applies Win32 argv escaping before cmd.exe, turning every " into a
+  // literal \" token. Scoped npm installs (@scope) and similar characters are
+  // safe unquoted, so only whitespace and cmd metacharacters force quotes.
+  const needsQuotes = /[\s"&|<>^()%!]/.test(commandPath);
+  const executable = process.platform === 'win32' && !needsQuotes
     ? commandPath : `"${commandPath}"`;
   for (const event of AGY_HOOK_EVENTS) {
     const handler = { type: 'command', command: `${executable} --source agy --event ${event} --udp-addr 127.0.0.1:${port}`, timeout: 1 };

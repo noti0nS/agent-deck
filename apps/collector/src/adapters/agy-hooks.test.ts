@@ -28,6 +28,15 @@ describe('Antigravity native hooks configuration', () => {
     expect(result.stdout.toLowerCase()).toContain('cmd.exe');
   });
 
+  it('keeps paths that cmd.exe parses unquoted, including scoped npm installs', () => {
+    const scopedPath = 'C:\\Users\\demo\\AppData\\Local\\nvm\\v24.13.1\\node_modules\\@noti0ns\\agent-deck\\tools\\hook-shim\\bin\\win32-x64\\agent-deck-hook.exe';
+    const command = (buildAgyHooks({}, scopedPath) as any)[AGY_HOOK_NAME].Stop[0].command as string;
+    expect(command).toBe(`${scopedPath} --source agy --event Stop --udp-addr 127.0.0.1:4102`);
+    expect(command).not.toContain('"');
+    const spaced = (buildAgyHooks({}, 'C:\\Program Files\\agent-deck-hook.exe') as any)[AGY_HOOK_NAME].Stop[0].command as string;
+    expect(spaced).toContain('"C:\\Program Files\\agent-deck-hook.exe"');
+  });
+
   it('installs once, preserves all unrelated hooks and removes only the observer even after subsequent user edits', () => {
     const dir = mkdtempSync(join(tmpdir(), 'agy-hooks-'));
     const path = join(dir, 'hooks.json');
