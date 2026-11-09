@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.3
+
+### Fixed
+
+- Antigravity no longer installs a `PreToolUse` observer. Clients that gate tool
+  calls on that hook, such as the Antigravity ACP server used by OpenBot, deny
+  every call when the observer does not run:
+  `denied by pre-tool hook: External hook 'agent-deck-observer' failed to execute`.
+  Reinstalling the hooks now removes an entry left by an earlier version, and
+  `agyHooksInstalled` reports such an install as not live. Session, turn,
+  post-tool and stop observers are unchanged.
+
 ## 1.1.2
 
 ### Fixed
