@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.2
+
+### Fixed
+
+- Antigravity hook commands now leave Windows executable paths unquoted,
+  including scoped npm installs such as `@noti0ns/agent-deck`. `agy` escapes
+  embedded quotes as literal `\"` before handing the command to `cmd.exe`, so
+  quoted paths failed with `'\"C:\...\"' is not recognized` and blocked every
+  agent turn and tool call. Paths that genuinely need quotes, such as those
+  containing spaces, keep them.
+
+### Changed
+
+- Added the repository release-preparation workflow under `.agents/skills/`.
+
 ## 1.1.1
 
 ### Fixed
