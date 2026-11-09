@@ -17,12 +17,17 @@ macOS is not included in CI or releases because it cannot currently be tested.
 | OpenCode V2 only | Registered service discovery/authentication; `/api/session` and `/api/event`; API history import | Tested against V2 2.2.5 and synthetic API/SSE contracts |
 | Claude Code | JSON inventory, lifecycle hooks, transcripts | Prior repository validation recorded 2.1.302; fixtures do not establish support for other releases |
 | Codex | Existing app-server daemon; rollout fallback | Transport tests and synthetic fixtures; daemon interfaces can change |
-| Antigravity | Observer hooks; summaries/transcripts | Hook schema/transport tests and synthetic fixtures; native version certification pending |
+| Antigravity | Lifecycle observer hooks, no pre-tool hook; summaries/transcripts | Hook schema/transport tests and synthetic fixtures; native version certification pending |
 | Generic CLI | PTY heuristics | Best-effort; not authoritative lifecycle or cost accounting |
 
 A configured CI target is not a completed successful CI run. Check the actual
 workflow result attached to the release before relying on a platform claim.
 Unit/E2E tests use dummy data and are separate from authenticated native-agent tests.
+
+Antigravity installs session, turn, post-tool and stop observers only. A
+pre-tool hook runs before every tool call, and clients that gate on it (the
+Antigravity ACP server, for example) deny the call when the hook fails to run,
+so an observer must never register one.
 
 ## Fixture provenance
 

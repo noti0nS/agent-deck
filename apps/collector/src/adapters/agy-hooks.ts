@@ -3,17 +3,27 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { EmitEventInput } from '../adapter-spi.js';
 
-export const AGY_HOOK_EVENTS = ['SessionStart', 'PreInvocation', 'PostInvocation', 'PreToolUse', 'PostToolUse', 'Stop'] as const;
+export const AGY_HOOK_EVENTS = ['SessionStart', 'PreInvocation', 'PostInvocation', 'PostToolUse', 'Stop'] as const;
+/**
+ * Every Antigravity event the normalizer understands, including `PreToolUse`.
+ * The pre-tool hook is no longer installed: an observer that fails to run makes
+ * clients such as the Antigravity ACP runtime deny the tool call instead of
+ * ignoring it, which blocks every action in the session.
+ */
+export const AGY_NATIVE_HOOK_EVENTS = ['SessionStart', 'PreInvocation', 'PostInvocation', 'PreToolUse', 'PostToolUse', 'Stop'] as const;
 export const AGY_HOOK_NAME = 'agent-deck-observer';
 export const AGY_HOOKS_PATH = join(homedir(), '.gemini', 'config', 'hooks.json');
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const owned = (value: unknown): boolean => record(value) && AGY_HOOK_EVENTS.every(event => {
   const entries = value[event];
   if (!Array.isArray(entries) || entries.length !== 1 || !record(entries[0])) return false;
-  const handlers = event === 'PreToolUse' || event === 'PostToolUse' ? entries[0].hooks : entries;
+  const handlers = event === 'PostToolUse' ? entries[0].hooks : entries;
   return Array.isArray(handlers) && handlers.length === 1 && record(handlers[0])
     && typeof handlers[0].command === 'string' && handlers[0].command.includes(` --source agy --event ${event} --udp-addr 127.0.0.1:`);
 });
+/** A retired pre-tool handler left by an earlier install, which still gates tools. */
+const retiredPreToolHandler = (value: unknown): boolean => JSON.stringify(value ?? null)
+  .includes(' --source agy --event PreToolUse --udp-addr');
 
 export function agyHookExecutable(commandPath: string, platform: string = process.platform): string {
   // Avoid embedded quotes for any Windows path cmd.exe can parse unquoted:
@@ -31,10 +41,12 @@ export function buildAgyHooks(existing: Record<string, unknown>, commandPath = '
     throw new Error(`Hook name ${AGY_HOOK_NAME} belongs to another configuration; refusing to replace it`);
   }
   const observer: Record<string, unknown> = { ...(record(existing[AGY_HOOK_NAME]) ? existing[AGY_HOOK_NAME] : {}), enabled: true };
+  // Drop the retired pre-tool observer so upgrades stop gating tool calls.
+  delete observer.PreToolUse;
   const executable = agyHookExecutable(commandPath);
   for (const event of AGY_HOOK_EVENTS) {
     const handler = { type: 'command', command: `${executable} --source agy --event ${event} --udp-addr 127.0.0.1:${port}`, timeout: 1 };
-    observer[event] = event === 'PreToolUse' || event === 'PostToolUse'
+    observer[event] = event === 'PostToolUse'
       ? [{ matcher: '*', hooks: [handler] }] : [handler];
   }
   return { ...existing, [AGY_HOOK_NAME]: observer };
@@ -45,6 +57,7 @@ export function removeAgyHooks(existing: Record<string, unknown>): Record<string
   if (owned(result[AGY_HOOK_NAME])) {
     const remainder = { ...(result[AGY_HOOK_NAME] as Record<string, unknown>) };
     for (const event of AGY_HOOK_EVENTS) delete remainder[event];
+    delete remainder.PreToolUse;
     delete remainder.enabled;
     if (Object.keys(remainder).length) result[AGY_HOOK_NAME] = remainder;
     else delete result[AGY_HOOK_NAME];
@@ -62,7 +75,9 @@ function readHooks(path: string): { text: string; parsed: Record<string, unknown
 export function agyHooksInstalled(path = AGY_HOOKS_PATH): boolean {
   try {
     const observer = readHooks(path).parsed[AGY_HOOK_NAME];
-    return record(observer) && owned(observer) && observer.enabled !== false && AGY_HOOK_EVENTS.every(event => Array.isArray(observer[event]) && (observer[event] as unknown[]).length > 0);
+    return record(observer) && owned(observer) && observer.enabled !== false
+      && !retiredPreToolHandler(observer.PreToolUse)
+      && AGY_HOOK_EVENTS.every(event => Array.isArray(observer[event]) && (observer[event] as unknown[]).length > 0);
   } catch { return false; }
 }
 
@@ -104,7 +119,7 @@ export class AgyHookNormalizer {
     const nativeId = typeof raw.conversationId === 'string' ? raw.conversationId : '';
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(nativeId)) return [];
     const event = String(raw.hook_event_name ?? '');
-    if (!AGY_HOOK_EVENTS.includes(event as typeof AGY_HOOK_EVENTS[number])) return [];
+    if (!AGY_NATIVE_HOOK_EVENTS.includes(event as typeof AGY_NATIVE_HOOK_EVENTS[number])) return [];
     if (typeof raw.emitted_at_ms === 'number') {
       if (!Number.isFinite(raw.emitted_at_ms) || raw.emitted_at_ms > ts + 5000 || raw.emitted_at_ms < ts - 120_000) return [];
       ts = raw.emitted_at_ms;

@@ -16,7 +16,7 @@ describe('Antigravity native hooks configuration', () => {
   it.skipIf(process.platform !== 'win32')('runs a simple Windows executable through the cmd argument launcher', () => {
     const executablePath = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe');
     const config = buildAgyHooks({}, executablePath) as any;
-    const command = config[AGY_HOOK_NAME].PreToolUse[0].hooks[0].command as string;
+    const command = config[AGY_HOOK_NAME].PostToolUse[0].hooks[0].command as string;
     // Test the executable token through cmd.exe, including ordinary Win32 argv
     // quoting, instead of bypassing the shell as the native-shim tests do.
     const executable = command.split(' --source ')[0];
@@ -40,6 +40,35 @@ describe('Antigravity native hooks configuration', () => {
     }
   });
 
+  it('never installs a pre-tool observer and retires one left by an earlier install', () => {
+    const hook = (event: string) => ({ type: 'command', command: `C:\\hook.exe --source agy --event ${event} --udp-addr 127.0.0.1:4102` });
+    const dir = mkdtempSync(join(tmpdir(), 'agy-retired-'));
+    const path = join(dir, 'hooks.json');
+    const legacy = {
+      [AGY_HOOK_NAME]: {
+        enabled: true,
+        SessionStart: [hook('SessionStart')],
+        PreInvocation: [hook('PreInvocation')],
+        PostInvocation: [hook('PostInvocation')],
+        PreToolUse: [{ matcher: '*', hooks: [hook('PreToolUse')] }],
+        PostToolUse: [{ matcher: '*', hooks: [hook('PostToolUse')] }],
+        Stop: [hook('Stop')]
+      }
+    };
+    writeFileSync(path, JSON.stringify(legacy));
+    try {
+      // A pre-tool hook that gates every tool call is not a usable observer.
+      expect(agyHooksInstalled(path)).toBe(false);
+      expect(setupAgyHooks({ hooksPath: path, commandPath: 'C:\\hook.exe' }).modified).toBe(true);
+      const installed = JSON.parse(readFileSync(path, 'utf8'));
+      expect(installed[AGY_HOOK_NAME].PreToolUse).toBeUndefined();
+      expect(JSON.stringify(installed)).not.toContain('PreToolUse');
+      expect(agyHooksInstalled(path)).toBe(true);
+      expect(uninstallAgyHooks({ hooksPath: path }).restored).toBe(true);
+      expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({});
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('installs once, preserves all unrelated hooks and removes only the observer even after subsequent user edits', () => {
     const dir = mkdtempSync(join(tmpdir(), 'agy-hooks-'));
     const path = join(dir, 'hooks.json');
@@ -55,7 +84,7 @@ describe('Antigravity native hooks configuration', () => {
       expect(readFileSync(path, 'utf8')).toBe(installedText);
       const installed = JSON.parse(installedText);
       expect(installed.custom).toEqual(original.custom);
-      expect(installed[AGY_HOOK_NAME].PreToolUse[0].hooks[0].command).toContain('"C:\\Program Files\\agent-deck-hook.exe" --source agy --event PreToolUse');
+      expect(installed[AGY_HOOK_NAME].PostToolUse[0].hooks[0].command).toContain('"C:\\Program Files\\agent-deck-hook.exe" --source agy --event PostToolUse');
       installed.later = { Stop: [{ command: 'later-user-hook' }] };
       writeFileSync(path, JSON.stringify(installed));
       expect(uninstallAgyHooks({ hooksPath: path }).restored).toBe(true);
