@@ -13,7 +13,7 @@
     "@agent-deck/core": "*",
     "@agent-deck/pricing": "*",
     "@agent-deck/protocol": "*",
-    "@lucide/svelte": "^1.68.0",
+    "@lucide/svelte": "^1.70.0",
     "@scritto/svelte": "^0.1.0"
   },
   "devDependencies": {
